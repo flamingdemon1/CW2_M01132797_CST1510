@@ -47,19 +47,24 @@ def load_users():
 
 def register_user():
     """Register a new user and store their hashed password."""
-    username = input("Enter your username: > ").strip()
-   
     users = load_users()
 
-    if username == "":
-        print("Username cannot be empty!")
-        return
+    username_prompt = "Enter your username: > "
 
-    if username in users:
-        print("This username already exists. Please choose another one.")
-        return
-    
+    while True:
+        username = input(username_prompt).strip()
+
+        if username == "":
+            username_prompt = "Username cannot be empty. Please enter a username: > "
+
+        elif username in users:
+            username_prompt = "This username already exists. Please choose another one: > "
+
+        else:
+            break
+
     password = getpass("Enter your password: > ")
+
     hashed_password = generate_hash(password)
 
     # Make sure the DATA folder exists
@@ -69,7 +74,6 @@ def register_user():
         file.write(f"{username},{hashed_password}\n")
 
     print("User successfully registered!")
-
 
 def login_user():
     """Check whether a username and password are correct."""
