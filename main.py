@@ -247,13 +247,17 @@ def main():
             register_user(conn)
 
         elif choice == "2":
-            logged_in_user = login_user(conn)
-
-            if logged_in_user is not None:
-                current_user = logged_in_user
-                print("Login successful!")
+            if current_user is not None:
+                print(f"You are already logged in as {current_user}.")
+                print("Please log out before logging in as another user.")
             else:
-                print("Incorrect username or password.")
+                logged_in_user = login_user(conn)
+
+                if logged_in_user is not None:
+                    current_user = logged_in_user
+                    print("Login successful!")
+                else:
+                    print("Incorrect username or password.")
 
         elif choice == "3":
             display_all_users(conn)
@@ -274,17 +278,13 @@ def main():
             print("Goodbye!")
             conn.close()
             break
-        
-        elif choice == "8":
-            print("Goodbye!")
-            conn.close()
-            break
-
         elif choice == "9":
             if current_user is None:
                 print("No user is currently logged in.")
             else:
-                confirmation = input("Are you sure you want to log out? yes/no: > ").strip().lower()
+                confirmation = input(
+                    "Are you sure you want to log out? yes/no: > "
+                ).strip().lower()
 
                 if confirmation == "yes":
                     print(f"{current_user} has been logged out.")
