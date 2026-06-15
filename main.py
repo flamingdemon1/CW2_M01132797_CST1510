@@ -3,7 +3,8 @@ from getpass import getpass
 
 import bcrypt
 
-import database
+from app_model import db, schema, users as user_model
+from app_model.logic import cyber_incidents, metadatas, it_tickets
 
 
 def generate_hash(password):
@@ -56,7 +57,7 @@ def register_user(conn):
         print("Username cannot be empty.")
         return
 
-    existing_user = database.get_user(conn, username)
+    existing_user = user_model.get_user(conn, username)
 
     if existing_user is not None:
         print("This username already exists. Please choose another one.")
@@ -73,7 +74,7 @@ def register_user(conn):
     hashed_password = generate_hash(password)
 
     try:
-        database.add_user(conn, username, hashed_password)
+        user_model.add_user(conn, username, hashed_password)
         print("User successfully registered!")
 
     except sqlite3.IntegrityError:
@@ -85,7 +86,7 @@ def login_user(conn):
     username = input("Enter your username: > ").strip()
     password = getpass("Enter your password: > ")
 
-    user = database.get_user(conn, username)
+    user = user_model.get_user(conn, username)
 
     if user is None:
         return None
@@ -109,9 +110,9 @@ def display_all_users(conn):
         entered_password = getpass("Enter the admin password to view all users: > ")
 
         if entered_password == admin_password:
-            users = database.get_all_users(conn)
+            registered_users = user_model.get_all_users(conn)
 
-            if len(users) == 0:
+            if len(registered_users) == 0:
                 print("No users have been registered yet.")
                 return
 
@@ -120,7 +121,7 @@ def display_all_users(conn):
             print(f"{'ID':<5}{'Username':<20}{'Role':<15}{'Password Hash'}")
             print("-" * 60)
 
-            for user in users:
+            for user in registered_users:
                 short_hash = user["password_hash"][:15] + "..."
                 print(f"{user['id']:<5}{user['username']:<20}{user['role']:<15}{short_hash}")
 
@@ -142,7 +143,7 @@ def update_username(conn):
         return
 
     try:
-        updated = database.update_user(conn, old_username, new_username)
+        updated = user_model.update_user(conn, old_username, new_username)
 
         if updated:
             print("Username updated successfully.")
@@ -167,7 +168,7 @@ def delete_user(conn):
         print("Delete cancelled.")
         return
 
-    deleted = database.delete_user(conn, username)
+    deleted = user_model.delete_user(conn, username)
 
     if deleted:
         print("User deleted successfully.")
@@ -178,7 +179,10 @@ def delete_user(conn):
 def migrate_csv_data(conn):
     """Move the CSV datasets into the SQLite database."""
     try:
-        database.migrate_all_datasets(conn)
+        cyber_incidents.migrate_cyber_incidents(conn)
+        metadatas.migrate_datasets_metadata(conn)
+        it_tickets.migrate_it_tickets(conn)
+
         print("CSV datasets successfully migrated into SQLite.")
 
     except FileNotFoundError:
@@ -196,15 +200,15 @@ def preview_migrated_data(conn):
 
     try:
         if choice == "1":
-            data = database.get_all_cyber_incidents(conn)
+            data = cyber_incidents.get_all_cyber_incidents(conn)
             print(data.head().to_string(index=False))
 
         elif choice == "2":
-            data = database.get_all_datasets_metadata(conn)
+            data = metadatas.get_all_datasets_metadata(conn)
             print(data.head().to_string(index=False))
 
         elif choice == "3":
-            data = database.get_all_it_tickets(conn)
+            data = it_tickets.get_all_it_tickets(conn)
             print(data.head().to_string(index=False))
 
         else:
@@ -216,8 +220,8 @@ def preview_migrated_data(conn):
 
 def main():
     """Display the menu and allow the user to use the SQLite-based system."""
-    conn = database.get_connection()
-    database.create_user_table(conn)
+    conn = db.get_connection()
+    schema.create_user_table(conn)
 
     current_user = None
 
@@ -278,6 +282,7 @@ def main():
             print("Goodbye!")
             conn.close()
             break
+
         elif choice == "9":
             if current_user is None:
                 print("No user is currently logged in.")
@@ -294,7 +299,7 @@ def main():
 
         else:
             print("Invalid choice. Please enter a number from 1 to 9.")
-     
+
 
 if __name__ == "__main__":
     main()
