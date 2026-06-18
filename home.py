@@ -1,130 +1,162 @@
-import pandas as pd
+import sqlite3
+
 import streamlit as st
 
-from app_model import db
-from app_model.logic import cyber_incidents
+from app_model import db, schema, users
+from main import generate_hash, is_strong_password, is_valid_hash
 
 
 st.set_page_config(
-    page_title="Gatekeeper System Dashboard",
-    page_icon="🛡️",
+    page_title="Gatekeeper Home",
+    page_icon="H",
     layout="wide"
 )
 
 
-def load_cyber_incident_data():
-    """Load cyber incident data from the SQLite database."""
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+
+if "username" not in st.session_state:
+    st.session_state["username"] = ""
+
+
+def register_streamlit_user(username, password):
+    """Register a new user in the SQLite users table."""
+    username = username.strip()
+
+    if username == "" or password == "":
+        st.error("Please enter both a username and a password.")
+        return
+
+    if not is_strong_password(password):
+        st.error(
+            "Password must be at least 8 characters and include an uppercase "
+            "letter, a number, and a symbol."
+        )
+        return
+
     conn = db.get_connection()
+    schema.create_user_table(conn)
 
     try:
-        data = cyber_incidents.get_all_cyber_incidents(conn)
+        existing_user = users.get_user(conn, username)
+
+        if existing_user is not None:
+            st.error("This username already exists. Please choose another one.")
+            return
+
+        password_hash = generate_hash(password)
+        users.add_user(conn, username, password_hash)
+        st.success("Registration successful. You can now log in.")
+
+    except sqlite3.IntegrityError:
+        st.error("This username already exists. Please choose another one.")
+
     finally:
         conn.close()
 
-    data["timestamp"] = pd.to_datetime(data["timestamp"], errors="coerce")
 
-    return data
+def login_streamlit_user(username, password):
+    """Log in a user by checking the SQLite password hash."""
+    username = username.strip()
+
+    if username == "" or password == "":
+        st.error("Please enter both a username and a password.")
+        return
+
+    conn = db.get_connection()
+    schema.create_user_table(conn)
+
+    try:
+        user = users.get_user(conn, username)
+
+        if user is None:
+            st.error("Incorrect username or password.")
+            return
+
+        stored_hash = user["password_hash"]
+
+        if is_valid_hash(password, stored_hash):
+            st.session_state["logged_in"] = True
+            st.session_state["username"] = username
+            st.success(f"Login successful. Welcome, {username}.")
+        else:
+            st.error("Incorrect username or password.")
+
+    finally:
+        conn.close()
 
 
-st.title(" 🛡️ Gatekeeper System Dashboard 🛡️ ")
+def logout_streamlit_user():
+    """Clear the Streamlit login session."""
+    st.session_state["logged_in"] = False
+    st.session_state["username"] = ""
+    st.info("You have been logged out.")
+
+
+st.title("Gatekeeper System")
 st.write(
-    "This Streamlit dashboard shows cyber incident records that have been "
-    "migrated from CSV files into the SQLite database. Use the sidebar to filter "
-    "the data by incident severity."
+    "Welcome to the Streamlit version of the CST1510 coursework project. "
+    "This page is the main entry point for the web app."
 )
 
-try:
-    data = load_cyber_incident_data()
+if st.session_state["logged_in"]:
+    st.success(f"Logged in as: {st.session_state['username']}")
+else:
+    st.warning("You are not logged in. Please log in before opening the dashboard.")
 
-    if data.empty:
-        st.warning("No cyber incident records were found in the database.")
-        st.info("Use option 6 in main.py to migrate the CSV data into SQLite.")
-        st.stop()
+st.subheader("Login and Register")
+st.write(
+    "Use the login tab if you already have an account. Use the register tab "
+    "to create a new account. Passwords are hashed before they are stored in SQLite."
+)
 
-    st.sidebar.header("Dashboard Filters")
-    st.sidebar.write("Choose a severity level to update the charts and table.")
+login_tab, register_tab = st.tabs(["Login", "Register"])
 
-    severity_options = ["All"] + sorted(data["severity"].dropna().unique().tolist())
-
-    selected_severity = st.sidebar.selectbox(
-        "Select incident severity:",
-        severity_options
+with login_tab:
+    login_username = st.text_input("Username", key="login_username")
+    login_password = st.text_input(
+        "Password",
+        type="password",
+        key="login_password"
     )
 
-    if selected_severity == "All":
-        filtered_data = data
-    else:
-        filtered_data = data[data["severity"] == selected_severity]
+    if st.button("Log in"):
+        login_streamlit_user(login_username, login_password)
 
-    st.subheader("Cyber Incident Summary")
-
-    if selected_severity == "All":
-        st.write("Currently showing: **All** cyber incidents.")
-    else:
-        st.write(f"Currently showing: **{selected_severity}** severity incidents.")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric("Total incidents", len(filtered_data))
-
-    with col2:
-        st.metric("Unique categories", filtered_data["category"].nunique())
-
-    with col3:
-        st.metric("Unique statuses", filtered_data["status"].nunique())
-
-    st.subheader("Incident Visualisations")
-    st.write(
-        "The charts below summarise the filtered cyber incident records. "
-        "They update when a different severity is selected in the sidebar."
+with register_tab:
+    register_username = st.text_input("New username", key="register_username")
+    register_password = st.text_input(
+        "New password",
+        type="password",
+        key="register_password"
     )
 
-    chart_col1, chart_col2 = st.columns(2)
-
-    with chart_col1:
-        st.write("Incidents by category")
-        st.caption("This chart shows which type of cyber incident appears most often.")
-
-        category_counts = filtered_data["category"].value_counts().reset_index()
-        category_counts.columns = ["Category", "Number of incidents"]
-
-        st.bar_chart(
-            category_counts,
-            x="Category",
-            y="Number of incidents"
-        )
-
-    with chart_col2:
-        st.write("Incidents by status")
-        st.caption("This chart shows whether incidents are open, resolved, or closed.")
-
-        status_counts = filtered_data["status"].value_counts().reset_index()
-        status_counts.columns = ["Status", "Number of incidents"]
-
-        st.bar_chart(
-            status_counts,
-            x="Status",
-            y="Number of incidents"
-        )
-
-    st.subheader("Filtered Cyber Incident Table")
-    st.write(
-        "The table below shows the full incident records that match the selected "
-        "severity filter. This makes it possible to inspect the details behind "
-        "the summary charts."
+    st.caption(
+        "Password rule: at least 8 characters, one uppercase letter, "
+        "one number, and one symbol."
     )
 
-    st.dataframe(filtered_data, width="stretch")
+    if st.button("Register"):
+        register_streamlit_user(register_username, register_password)
 
-    st.subheader("Dashboard Insight")
-    st.write(
-        "This dashboard helps identify the most common cyber incident categories "
-        "and shows the current status of reported incidents. The severity filter "
-        "allows users to focus on specific risk levels and inspect the matching records."
-    )
+st.divider()
 
-except Exception as error:
-    st.error("The cyber incident data could not be loaded.")
-    st.info("Make sure you have migrated the CSV datasets into SQLite using option 6 in main.py.")
-    st.caption(f"Technical detail: {error}")
+st.subheader("Dashboard Access")
+st.write(
+    "The cyber incident dashboard is stored as a separate Streamlit page inside "
+    "the pages folder. It can only be viewed after a successful login."
+)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    if st.button("Open dashboard"):
+        if st.session_state["logged_in"]:
+            st.switch_page("pages/1_dashboard.py")
+        else:
+            st.error("Please log in before opening the dashboard.")
+
+with col2:
+    if st.button("Log out"):
+        logout_streamlit_user()
