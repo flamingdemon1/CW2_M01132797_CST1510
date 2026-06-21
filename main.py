@@ -508,7 +508,7 @@ def main():
         print("1. Register")
         print("2. Log in")
         print("3. View all users")
-        print("4. Update username")
+        print("4. Change username")
         print("5. Delete user")
         print("6. Migrate CSV datasets to SQLite")
         print("7. Preview migrated data")

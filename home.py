@@ -1,7 +1,5 @@
 import sqlite3
-
 import streamlit as st
-
 from app_model import db, schema, users
 from main import generate_hash, is_valid_hash
 

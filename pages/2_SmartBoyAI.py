@@ -1,5 +1,4 @@
 import streamlit as st
-
 from app_model import db
 from app_model.logic import cyber_incidents
 
