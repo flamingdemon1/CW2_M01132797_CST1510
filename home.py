@@ -3,7 +3,7 @@ import sqlite3
 import streamlit as st
 
 from app_model import db, schema, users
-from main import generate_hash, is_strong_password, is_valid_hash
+from main import generate_hash, is_valid_hash
 
 
 st.set_page_config(
@@ -20,6 +20,25 @@ if "username" not in st.session_state:
     st.session_state["username"] = ""
 
 
+def get_password_errors(password):
+    """Return a list of password strength problems."""
+    errors = []
+
+    if len(password) < 8:
+        errors.append("Password must be at least 8 characters long.")
+
+    if not any(char.isupper() for char in password):
+        errors.append("Password must contain at least one uppercase letter.")
+
+    if not any(char.isdigit() for char in password):
+        errors.append("Password must contain at least one number.")
+
+    if not any(not char.isalnum() for char in password):
+        errors.append("Password must contain at least one symbol.")
+
+    return errors
+
+
 def register_streamlit_user(username, password):
     """Register a new user in the SQLite users table."""
     username = username.strip()
@@ -28,11 +47,14 @@ def register_streamlit_user(username, password):
         st.error("Please enter both a username and a password.")
         return
 
-    if not is_strong_password(password):
-        st.error(
-            "Password must be at least 8 characters and include an uppercase "
-            "letter, a number, and a symbol."
-        )
+    password_errors = get_password_errors(password)
+
+    if password_errors:
+        st.error("Weak password. Please fix the following:")
+
+        for error in password_errors:
+            st.write(f"- {error}")
+
         return
 
     conn = db.get_connection()
