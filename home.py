@@ -79,9 +79,10 @@ def login_streamlit_user(username, password):
         if is_valid_hash(password, stored_hash):
             st.session_state["logged_in"] = True
             st.session_state["username"] = username
-            st.success(f"Login successful. Welcome, {username}.")
-        else:
-            st.error("Incorrect username or password.")
+            st.switch_page("pages/1_dashboard.py")
+            return
+
+        st.error("Incorrect username or password.")
 
     finally:
         conn.close()
@@ -91,72 +92,65 @@ def logout_streamlit_user():
     """Clear the Streamlit login session."""
     st.session_state["logged_in"] = False
     st.session_state["username"] = ""
-    st.info("You have been logged out.")
 
 
 st.title("Gatekeeper System")
 st.write(
     "Welcome to the Streamlit version of the CST1510 coursework project. "
-    "This page is the main entry point for the web app."
+    "Log in or register below to access the cyber incident dashboard."
 )
 
 if st.session_state["logged_in"]:
-    st.success(f"Logged in as: {st.session_state['username']}")
-else:
-    st.warning("You are not logged in. Please log in before opening the dashboard.")
+    st.success(f"Welcome, {st.session_state['username']}. You are logged in.")
 
-st.subheader("Login and Register")
-st.write(
-    "Use the login tab if you already have an account. Use the register tab "
-    "to create a new account. Passwords are hashed before they are stored in SQLite."
-)
-
-login_tab, register_tab = st.tabs(["Login", "Register"])
-
-with login_tab:
-    login_username = st.text_input("Username", key="login_username")
-    login_password = st.text_input(
-        "Password",
-        type="password",
-        key="login_password"
+    st.write(
+        "You can now open the protected dashboard, or log out when you have "
+        "finished using the system."
     )
 
-    if st.button("Log in"):
-        login_streamlit_user(login_username, login_password)
+    col1, col2 = st.columns(2)
 
-with register_tab:
-    register_username = st.text_input("New username", key="register_username")
-    register_password = st.text_input(
-        "New password",
-        type="password",
-        key="register_password"
-    )
-
-    st.caption(
-        "Password rule: at least 8 characters, one uppercase letter, "
-        "one number, and one symbol."
-    )
-
-    if st.button("Register"):
-        register_streamlit_user(register_username, register_password)
-
-st.divider()
-
-st.subheader("Dashboard Access")
-st.write(
-    "The cyber incident dashboard is stored as a separate Streamlit page inside "
-    "the pages folder. It can only be viewed after a successful login."
-)
-
-col1, col2 = st.columns(2)
-
-with col1:
-    if st.button("Open dashboard"):
-        if st.session_state["logged_in"]:
+    with col1:
+        if st.button("Open dashboard"):
             st.switch_page("pages/1_dashboard.py")
-        else:
-            st.error("Please log in before opening the dashboard.")
 
-with col2:
-    if st.button("Log out"):
-        logout_streamlit_user()
+    with col2:
+        if st.button("Log out"):
+            logout_streamlit_user()
+            st.rerun()
+
+else:
+    login_tab, register_tab = st.tabs(["Login", "Register"])
+
+    with login_tab:
+        st.subheader("Login")
+        st.write("Enter your username and password to access the dashboard.")
+
+        login_username = st.text_input("Username", key="login_username")
+        login_password = st.text_input(
+            "Password",
+            type="password",
+            key="login_password"
+        )
+
+        if st.button("Log in"):
+            login_streamlit_user(login_username, login_password)
+
+    with register_tab:
+        st.subheader("Register")
+        st.write("Create a new account. Your password will be stored as a hash.")
+
+        register_username = st.text_input("New username", key="register_username")
+        register_password = st.text_input(
+            "New password",
+            type="password",
+            key="register_password"
+        )
+
+        st.caption(
+            "Password rule: at least 8 characters, one uppercase letter, "
+            "one number, and one symbol."
+        )
+
+        if st.button("Register"):
+            register_streamlit_user(register_username, register_password)

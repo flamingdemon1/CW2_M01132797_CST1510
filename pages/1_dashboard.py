@@ -1,19 +1,22 @@
 import pandas as pd
 import streamlit as st
+
 from app_model import db
 from app_model.logic import cyber_incidents
 
 
 st.set_page_config(
     page_title="Cyber Incident Dashboard",
-    page_icon="📊",
+    page_icon="D",
     layout="wide"
-    
 )
 
 
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
+
+if "username" not in st.session_state:
+    st.session_state["username"] = ""
 
 
 if not st.session_state["logged_in"]:
@@ -29,7 +32,7 @@ if not st.session_state["logged_in"]:
     st.stop()
 
 
-st.sidebar.success(f"Logged in as: {st.session_state.get('username', '')}")
+st.sidebar.success(f"Logged in as: {st.session_state['username']}")
 
 if st.sidebar.button("Log out"):
     st.session_state["logged_in"] = False
@@ -51,7 +54,8 @@ def load_cyber_incident_data():
     return data
 
 
-st.title("📊 Gatekeeper System Dashboard 📊")
+st.title("Gatekeeper System Dashboard")
+st.success(f"Welcome, {st.session_state['username']}. You are logged in.")
 st.write(
     "This Streamlit dashboard shows cyber incident records that have been "
     "migrated from CSV files into the SQLite database. Use the sidebar to filter "
