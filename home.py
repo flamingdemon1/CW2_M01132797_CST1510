@@ -130,13 +130,17 @@ if st.session_state["logged_in"]:
         "finished using the system."
     )
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         if st.button("Open dashboard"):
             st.switch_page("pages/1_dashboard.py")
 
     with col2:
+        if st.button("Open SmartBoyAI"):
+            st.switch_page("pages/2_SmartBoyAI.py")
+
+    with col3:
         if st.button("Log out"):
             logout_streamlit_user()
             st.rerun()
@@ -148,31 +152,34 @@ else:
         st.subheader("Login")
         st.write("Enter your username and password to access the dashboard.")
 
-        login_username = st.text_input("Username", key="login_username")
-        login_password = st.text_input(
-            "Password",
-            type="password",
-            key="login_password"
-        )
+        with st.form("login_form"):
+            login_username = st.text_input("Username")
+            login_password = st.text_input(
+                "Password",
+                type="password"
+            )
+            login_submitted = st.form_submit_button("Log in")
 
-        if st.button("Log in"):
+        if login_submitted:
             login_streamlit_user(login_username, login_password)
 
     with register_tab:
         st.subheader("Register")
         st.write("Create a new account. Your password will be stored as a hash.")
 
-        register_username = st.text_input("New username", key="register_username")
-        register_password = st.text_input(
-            "New password",
-            type="password",
-            key="register_password"
-        )
+        with st.form("register_form"):
+            register_username = st.text_input("New username")
+            register_password = st.text_input(
+                "New password",
+                type="password"
+            )
 
-        st.caption(
-            "Password rule: at least 8 characters, one uppercase letter, "
-            "one number, and one symbol."
-        )
+            st.caption(
+                "Password rule: at least 8 characters, one uppercase letter, "
+                "one number, and one symbol."
+            )
 
-        if st.button("Register"):
+            register_submitted = st.form_submit_button("Register")
+
+        if register_submitted:
             register_streamlit_user(register_username, register_password)
