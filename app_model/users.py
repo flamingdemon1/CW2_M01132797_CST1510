@@ -54,6 +54,22 @@ def update_user(conn, old_username, new_username):
     return cursor.rowcount > 0
 
 
+def update_password(conn, username, new_password_hash):
+    """Update a user's password hash."""
+    cursor = conn.cursor()
+
+    sql = """
+    UPDATE users
+    SET password_hash = ?
+    WHERE username = ?;
+    """
+
+    cursor.execute(sql, (new_password_hash, username))
+    conn.commit()
+
+    return cursor.rowcount > 0
+
+
 def delete_user(conn, username):
     """Delete a user from the users table."""
     cursor = conn.cursor()
