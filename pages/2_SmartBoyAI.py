@@ -1,6 +1,9 @@
+import os
+
+import pandas as pd
 import streamlit as st
 from app_model import db
-from app_model.logic import cyber_incidents
+from app_model.logic import cyber_incidents, it_tickets, metadatas
 
 
 st.set_page_config(
@@ -39,27 +42,28 @@ if st.sidebar.button("Log out"):
 
 
 def get_groq_api_key():
-    """Return the Groq API key from Streamlit secrets."""
+    """Return the Groq API key from Streamlit secrets or an environment variable."""
     try:
         return st.secrets["GROQ_API_KEY"]
     except Exception:
-        return ""
+        return os.getenv("GROQ_API_KEY", "")
 
 
-def load_cyber_incident_data():
-    """Load cyber incident data from the SQLite database."""
-    conn = db.get_connection()
-
+def load_table(conn, table_name, load_function):
+    """Load one migrated table and report whether it was available."""
     try:
-        data = cyber_incidents.get_all_cyber_incidents(conn)
-    finally:
-        conn.close()
-
-    return data
+        return load_function(conn), None
+    except Exception:
+        return pd.DataFrame(), table_name
 
 
-def format_counts(counts):
+def format_counts(data, column_name):
     """Turn a pandas value_counts result into simple text."""
+    if column_name not in data.columns:
+        return "Column not found."
+
+    counts = data[column_name].value_counts()
+
     if counts.empty:
         return "No records found."
 
@@ -71,39 +75,249 @@ def format_counts(counts):
     return "\n".join(count_lines)
 
 
-def create_cyber_incident_summary():
-    """Create a short text summary of the dashboard data for SmartBoyAI."""
+def get_average_resolution_time(ticket_data):
+    """Return the average IT ticket resolution time if the column is available."""
+    if "resolution_time_hours" not in ticket_data.columns:
+        return "Not available."
+
+    resolution_times = pd.to_numeric(
+        ticket_data["resolution_time_hours"],
+        errors="coerce"
+    ).dropna()
+
+    if resolution_times.empty:
+        return "Not available."
+
+    return f"{resolution_times.mean():.1f} hours"
+
+
+def load_project_data():
+    """Load the dashboard tables from SQLite."""
+    conn = db.get_connection()
+    missing_tables = []
+
     try:
-        data = load_cyber_incident_data()
-    except Exception:
-        return "Cyber incident data could not be loaded from SQLite."
+        cyber_data, missing_cyber = load_table(
+            conn,
+            "cyber_incidents",
+            cyber_incidents.get_all_cyber_incidents
+        )
+        ticket_data, missing_tickets = load_table(
+            conn,
+            "it_tickets",
+            it_tickets.get_all_it_tickets
+        )
+        metadata_data, missing_metadata = load_table(
+            conn,
+            "datasets_metadata",
+            metadatas.get_all_datasets_metadata
+        )
+    finally:
+        conn.close()
 
-    if data.empty:
-        return "The cyber incident table is empty."
+    for table_name in [missing_cyber, missing_tickets, missing_metadata]:
+        if table_name is not None:
+            missing_tables.append(table_name)
 
-    severity_counts = data["severity"].value_counts()
-    category_counts = data["category"].value_counts()
-    status_counts = data["status"].value_counts()
-
-    summary = f"""
-Cyber incident dashboard data summary:
-
-Total number of incidents: {len(data)}
-
-Severity counts:
-{format_counts(severity_counts)}
-
-Category counts:
-{format_counts(category_counts)}
-
-Status counts:
-{format_counts(status_counts)}
-"""
-
-    return summary.strip()
+    return cyber_data, ticket_data, metadata_data, missing_tables
 
 
-def ask_smartboyai(message_history, api_key, dataset_summary):
+def format_rows(data, columns, max_rows=80):
+    """Format a filtered set of dashboard rows for the AI prompt."""
+    available_columns = []
+
+    for column in columns:
+        if column in data.columns:
+            available_columns.append(column)
+
+    if not available_columns:
+        return "No matching columns found."
+
+    shown_data = data[available_columns].head(max_rows)
+    result = shown_data.to_string(index=False)
+
+    if len(data) > max_rows:
+        result += f"\nOnly the first {max_rows} matching rows are shown."
+
+    return result
+
+
+def add_matching_rows(summary_parts, data, column_name, question, title, columns):
+    """Add filtered dashboard rows when the user's question mentions a value."""
+    if data.empty or column_name not in data.columns:
+        return
+
+    question_lower = question.lower()
+    values = data[column_name].dropna().unique()
+
+    for value in values:
+        value_text = str(value)
+
+        if value_text.lower() in question_lower:
+            matching_rows = data[data[column_name].astype(str).str.lower() == value_text.lower()]
+            summary_parts.extend([
+                "",
+                f"{title} where {column_name} is {value_text}:",
+                f"Matching records: {len(matching_rows)}",
+                format_rows(matching_rows, columns)
+            ])
+
+
+def create_database_context(question):
+    """Create hidden, question-focused database context for SmartBoyAI."""
+    cyber_data, ticket_data, metadata_data, missing_tables = load_project_data()
+
+    summary_parts = [
+        "Hidden project database context for SmartBoyAI:",
+        "",
+        "Use this context only to answer the user's current question.",
+        "This context is loaded from migrated dashboard tables in SQLite.",
+        "It never includes user accounts, login details, API keys, or password hashes.",
+        "Do not say that the user can see this context on the page."
+    ]
+
+    if not cyber_data.empty:
+        summary_parts.extend([
+            "",
+            "Cyber incident summary:",
+            f"- Total incidents: {len(cyber_data)}",
+            "- Severity counts:",
+            format_counts(cyber_data, "severity"),
+            "- Category/type counts:",
+            format_counts(cyber_data, "category"),
+            "- Status counts:",
+            format_counts(cyber_data, "status")
+        ])
+
+        add_matching_rows(
+            summary_parts,
+            cyber_data,
+            "severity",
+            question,
+            "Cyber incidents",
+            ["incident_id", "timestamp", "severity", "category", "status", "description"]
+        )
+        add_matching_rows(
+            summary_parts,
+            cyber_data,
+            "category",
+            question,
+            "Cyber incidents",
+            ["incident_id", "timestamp", "severity", "category", "status", "description"]
+        )
+        add_matching_rows(
+            summary_parts,
+            cyber_data,
+            "status",
+            question,
+            "Cyber incidents",
+            ["incident_id", "timestamp", "severity", "category", "status", "description"]
+        )
+
+    if not ticket_data.empty:
+        summary_parts.extend([
+            "",
+            "IT ticket summary:",
+            f"- Total tickets: {len(ticket_data)}",
+            "- Priority counts:",
+            format_counts(ticket_data, "priority"),
+            "- Status counts:",
+            format_counts(ticket_data, "status"),
+            f"- Average resolution time: {get_average_resolution_time(ticket_data)}"
+        ])
+
+        add_matching_rows(
+            summary_parts,
+            ticket_data,
+            "priority",
+            question,
+            "IT tickets",
+            [
+                "ticket_id",
+                "priority",
+                "status",
+                "assigned_to",
+                "created_at",
+                "resolution_time_hours",
+                "description"
+            ]
+        )
+        add_matching_rows(
+            summary_parts,
+            ticket_data,
+            "status",
+            question,
+            "IT tickets",
+            [
+                "ticket_id",
+                "priority",
+                "status",
+                "assigned_to",
+                "created_at",
+                "resolution_time_hours",
+                "description"
+            ]
+        )
+
+    if not metadata_data.empty:
+        total_rows = "Not available."
+        average_columns = "Not available."
+        dataset_names = "Not available."
+
+        if "rows" in metadata_data.columns:
+            rows = pd.to_numeric(metadata_data["rows"], errors="coerce").dropna()
+            if not rows.empty:
+                total_rows = f"{int(rows.sum())}"
+
+        if "columns" in metadata_data.columns:
+            columns = pd.to_numeric(
+                metadata_data["columns"],
+                errors="coerce"
+            ).dropna()
+            if not columns.empty:
+                average_columns = f"{columns.mean():.1f}"
+
+        if "name" in metadata_data.columns:
+            dataset_names = ", ".join(metadata_data["name"].head(10).astype(str))
+
+        summary_parts.extend([
+            "",
+            "Dataset metadata summary:",
+            f"- Total datasets: {len(metadata_data)}",
+            f"- Combined dataset rows: {total_rows}",
+            f"- Average number of columns: {average_columns}",
+            f"- Dataset names: {dataset_names}"
+        ])
+
+        if "dataset" in question.lower() or "metadata" in question.lower():
+            summary_parts.extend([
+                "",
+                "Dataset metadata rows:",
+                format_rows(
+                    metadata_data,
+                    ["dataset_id", "name", "rows", "columns", "uploaded_by", "upload_date"]
+                )
+            ])
+
+    if missing_tables:
+        summary_parts.extend([
+            "",
+            "Unavailable tables:",
+            ", ".join(missing_tables),
+            "If a user asks about unavailable data, explain that the CSV data "
+            "must be migrated into SQLite first."
+        ])
+
+    if len(summary_parts) == 4:
+        summary_parts.append("")
+        summary_parts.append(
+            "No migrated dashboard tables were available in SQLite."
+        )
+
+    return "\n".join(summary_parts)
+
+
+def ask_smartboyai(message_history, api_key, database_context):
     """Send the conversation history to Groq and return the assistant reply."""
     try:
         from groq import Groq
@@ -122,9 +336,12 @@ def ask_smartboyai(message_history, api_key, dataset_summary):
             "assistant for a first-year computer science coursework project. "
             "Keep answers clear, safe, and beginner-friendly. Help users "
             "understand cyber incidents, IT tickets, and dataset questions. "
-            "Use the dashboard data summary below when answering questions "
-            "about the current cyber incident dashboard.\n\n"
-            f"{dataset_summary}"
+            "Use the hidden database context below when answering questions "
+            "about the current dashboard or project data. If matching dashboard "
+            "rows are included, use them to give specific answers. Do not "
+            "pretend to know data that is not included. If tables are missing, "
+            "tell the user to migrate the CSV data into SQLite first.\n\n"
+            f"{database_context}"
         )
     }
 
@@ -155,10 +372,6 @@ st.warning(
 )
 
 api_key = get_groq_api_key()
-dataset_summary = create_cyber_incident_summary()
-
-with st.expander("Current dashboard data summary"):
-    st.markdown(dataset_summary)
 
 if api_key == "":
     st.info(
@@ -190,10 +403,11 @@ if user_prompt:
     else:
         with st.spinner("SmartBoyAI is thinking..."):
             try:
+                database_context = create_database_context(user_prompt)
                 assistant_reply = ask_smartboyai(
                     st.session_state["messages"],
                     api_key,
-                    dataset_summary
+                    database_context
                 )
             except Exception as error:
                 assistant_reply = "SmartBoyAI could not get a response."
