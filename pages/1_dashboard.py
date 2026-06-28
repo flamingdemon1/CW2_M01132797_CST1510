@@ -36,6 +36,7 @@ if not st.session_state["logged_in"]:
         "Return to Gatekeeper home and authenticate before viewing incident data.",
         accent="red",
     )
+    st.markdown('<div style="height: 1.25rem;"></div>', unsafe_allow_html=True)
 
     if st.button("Go to home page", icon=":material/home:"):
         st.switch_page("home.py")
