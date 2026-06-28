@@ -1,14 +1,17 @@
 import pandas as pd
 import streamlit as st
-from app_model import db
+from app_model import db, ui
 from app_model.logic import cyber_incidents
 
 
 st.set_page_config(
     page_title="Cyber Incident Dashboard",
     page_icon="D",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="auto",
 )
+
+ui.apply_theme()
 
 
 if "logged_in" not in st.session_state:
@@ -19,21 +22,31 @@ if "username" not in st.session_state:
 
 
 if not st.session_state["logged_in"]:
-    st.warning("Please log in before viewing the dashboard.")
-    st.info(
-        "Go to the home page, enter your username and password, and then "
-        "return to the dashboard after a successful login."
+    ui.page_header(
+        "Restricted Area",
+        "Authentication is required to open the Security Dashboard.",
+        status="ACCESS DENIED",
+        status_accent="red",
+    )
+    ui.status_card(
+        "Protected route",
+        "Return to Gatekeeper home and authenticate before viewing incident data.",
+        accent="red",
     )
 
-    if st.button("Go to home page"):
+    if st.button("Go to home page", icon=":material/home:"):
         st.switch_page("home.py")
 
     st.stop()
 
 
-st.sidebar.success(f"Logged in as: {st.session_state['username']}")
+ui.sidebar_user(st.session_state["username"])
 
-if st.sidebar.button("Log out"):
+if st.sidebar.button(
+    "Log out",
+    icon=":material/logout:",
+    use_container_width=True,
+):
     st.session_state["logged_in"] = False
     st.session_state["username"] = ""
     st.switch_page("home.py")
@@ -53,24 +66,30 @@ def load_cyber_incident_data():
     return data
 
 
-st.title("Gatekeeper System Dashboard")
-st.success(f"Welcome, {st.session_state['username']}. You are logged in.")
-st.write(
-    "This Streamlit dashboard shows cyber incident records that have been "
-    "migrated from CSV files into the SQLite database. Use the sidebar to filter "
-    "the data by incident severity."
+ui.page_header(
+    "Security Dashboard",
+    "Cyber incident monitoring and operational intelligence",
+    status="DATA LINK ACTIVE",
+)
+ui.status_card(
+    "Authenticated operator",
+    f"Incident workspace active for {st.session_state['username']}.",
+    accent="green",
 )
 
 try:
     data = load_cyber_incident_data()
 
     if data.empty:
-        st.warning("No cyber incident records were found in the database.")
-        st.info("Use option 6 in main.py to migrate the CSV data into SQLite.")
+        ui.status_card(
+            "No incident records available",
+            "Use option 6 in main.py to migrate the CSV data into SQLite.",
+            accent="amber",
+        )
         st.stop()
 
-    st.sidebar.header("Dashboard Filters")
-    st.sidebar.write("Choose a severity level to update the charts and table.")
+    st.sidebar.markdown("### Incident filters")
+    st.sidebar.caption("Filter every dashboard view by incident severity.")
 
     severity_options = ["All"] + sorted(data["severity"].dropna().unique().tolist())
 
@@ -84,75 +103,105 @@ try:
     else:
         filtered_data = data[data["severity"] == selected_severity]
 
-    st.subheader("Cyber Incident Summary")
+    ui.section_heading(
+        "Incident summary",
+        "Current totals for the selected severity scope.",
+    )
 
     if selected_severity == "All":
-        st.write("Currently showing: **All** cyber incidents.")
+        filter_note = "All severity levels"
     else:
-        st.write(f"Currently showing: **{selected_severity}** severity incidents.")
+        filter_note = f"{selected_severity} severity only"
+
+    ui.status_card(
+        "Active data scope",
+        filter_note,
+        accent="blue",
+    )
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.metric("Total incidents", len(filtered_data))
+        ui.metric_card(
+            "Total incidents",
+            len(filtered_data),
+            note="Records in the active scope",
+            accent="cyan",
+        )
 
     with col2:
-        st.metric("Unique categories", filtered_data["category"].nunique())
+        ui.metric_card(
+            "Unique categories",
+            filtered_data["category"].nunique(),
+            note="Distinct incident classifications",
+            accent="blue",
+        )
 
     with col3:
-        st.metric("Unique statuses", filtered_data["status"].nunique())
+        ui.metric_card(
+            "Unique statuses",
+            filtered_data["status"].nunique(),
+            note="Distinct workflow states",
+            accent="green",
+        )
 
-    st.subheader("Incident Visualisations")
-    st.write(
-        "The charts below summarise the filtered cyber incident records. "
-        "They update when a different severity is selected in the sidebar."
+    ui.section_heading(
+        "Incident visualisations",
+        "Category and status distribution for the active data scope.",
     )
 
     chart_col1, chart_col2 = st.columns(2)
 
     with chart_col1:
-        st.write("Incidents by category")
-        st.caption("This chart shows which type of cyber incident appears most often.")
+        with st.container(border=True):
+            st.markdown("#### Incidents by category")
+            st.caption("Frequency of each cyber incident classification.")
 
-        category_counts = filtered_data["category"].value_counts().reset_index()
-        category_counts.columns = ["Category", "Number of incidents"]
+            category_counts = filtered_data["category"].value_counts().reset_index()
+            category_counts.columns = ["Category", "Number of incidents"]
 
-        st.bar_chart(
-            category_counts,
-            x="Category",
-            y="Number of incidents"
-        )
+            st.bar_chart(
+                category_counts,
+                x="Category",
+                y="Number of incidents",
+                color="#22D3EE",
+            )
 
     with chart_col2:
-        st.write("Incidents by status")
-        st.caption("This chart shows whether incidents are open, resolved, or closed.")
+        with st.container(border=True):
+            st.markdown("#### Incidents by status")
+            st.caption("Distribution across open, resolved, and closed states.")
 
-        status_counts = filtered_data["status"].value_counts().reset_index()
-        status_counts.columns = ["Status", "Number of incidents"]
+            status_counts = filtered_data["status"].value_counts().reset_index()
+            status_counts.columns = ["Status", "Number of incidents"]
 
-        st.bar_chart(
-            status_counts,
-            x="Status",
-            y="Number of incidents"
-        )
+            st.bar_chart(
+                status_counts,
+                x="Status",
+                y="Number of incidents",
+                color="#34D399",
+            )
 
-    st.subheader("Filtered Cyber Incident Table")
-    st.write(
-        "The table below shows the full incident records that match the selected "
-        "severity filter. This makes it possible to inspect the details behind "
-        "the summary charts."
+    ui.section_heading(
+        "Incident records",
+        "Detailed records matching the selected severity filter.",
     )
 
     st.dataframe(filtered_data, width="stretch")
 
-    st.subheader("Dashboard Insight")
-    st.write(
+    ui.section_heading("Operational insight")
+    ui.section_card(
+        "What this view highlights",
         "This dashboard helps identify the most common cyber incident categories "
         "and shows the current status of reported incidents. The severity filter "
-        "allows users to focus on specific risk levels and inspect the matching records."
+        "allows users to focus on specific risk levels and inspect matching records.",
+        accent="amber",
     )
 
 except Exception as error:
     st.error("The cyber incident data could not be loaded.")
-    st.info("Make sure you have migrated the CSV datasets into SQLite using option 6 in main.py.")
+    st.info(
+        "Make sure you have migrated the CSV datasets into SQLite using option 6 "
+        "in main.py."
+    )
     st.caption(f"Technical detail: {error}")

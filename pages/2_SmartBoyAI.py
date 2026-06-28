@@ -2,15 +2,18 @@ import os
 
 import pandas as pd
 import streamlit as st
-from app_model import db
+from app_model import db, ui
 from app_model.logic import cyber_incidents, it_tickets, metadatas
 
 
 st.set_page_config(
     page_title="SmartBoyAI",
     page_icon="S",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="auto",
 )
+
+ui.apply_theme()
 
 
 if "logged_in" not in st.session_state:
@@ -21,21 +24,31 @@ if "username" not in st.session_state:
 
 
 if not st.session_state["logged_in"]:
-    st.warning("Please log in before using SmartBoyAI.")
-    st.info(
-        "Go to the home page, enter your username and password, and then "
-        "return to SmartBoyAI after a successful login."
+    ui.page_header(
+        "Restricted Area",
+        "Authentication is required to open SmartBoyAI Assistant.",
+        status="ACCESS DENIED",
+        status_accent="red",
+    )
+    ui.status_card(
+        "Protected route",
+        "Return to Gatekeeper home and authenticate before opening the AI workspace.",
+        accent="red",
     )
 
-    if st.button("Go to home page"):
+    if st.button("Go to home page", icon=":material/home:"):
         st.switch_page("home.py")
 
     st.stop()
 
 
-st.sidebar.success(f"Logged in as: {st.session_state['username']}")
+ui.sidebar_user(st.session_state["username"])
 
-if st.sidebar.button("Log out"):
+if st.sidebar.button(
+    "Log out",
+    icon=":material/logout:",
+    use_container_width=True,
+):
     st.session_state["logged_in"] = False
     st.session_state["username"] = ""
     st.switch_page("home.py")
@@ -360,30 +373,56 @@ if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
 
-st.title("SmartBoyAI")
-st.success(f"Welcome, {st.session_state['username']}. You are logged in.")
-st.write(
-    "SmartBoyAI can help explain cybersecurity incidents, IT tickets, "
-    "and dataset-related questions in simple language."
-)
-st.warning(
-    "Do not enter private passwords, API keys, personal information, or other "
-    "sensitive data into SmartBoyAI."
-)
-
 api_key = get_groq_api_key()
 
 if api_key == "":
-    st.info(
-        "SmartBoyAI is not configured yet. Add your Groq API key to "
-        ".streamlit/secrets.toml as GROQ_API_KEY before using this page."
+    ai_status = "CONFIGURATION REQUIRED"
+    ai_status_accent = "amber"
+else:
+    ai_status = "AI GATEWAY READY"
+    ai_status_accent = "green"
+
+ui.page_header(
+    "SmartBoyAI Assistant",
+    "Database-aware cybersecurity and IT support",
+    status=ai_status,
+    status_accent=ai_status_accent,
+)
+
+session_column, safety_column = st.columns(2)
+
+with session_column:
+    ui.status_card(
+        "Authenticated operator",
+        f"AI workspace active for {st.session_state['username']}.",
+        accent="green",
     )
+
+with safety_column:
+    ui.status_card(
+        "Sensitive data boundary",
+        "Do not enter passwords, API keys, personal information, or other "
+        "private data.",
+        accent="amber",
+    )
+
+if api_key == "":
+    ui.status_card(
+        "AI gateway unavailable",
+        "Add GROQ_API_KEY to .streamlit/secrets.toml before using SmartBoyAI.",
+        accent="red",
+    )
+
+ui.section_heading(
+    "Secure conversation",
+    "Ask about current cyber incidents, IT tickets, or migrated dataset summaries.",
+)
 
 for message in st.session_state["messages"]:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
-user_prompt = st.chat_input("Ask SmartBoyAI a question...")
+user_prompt = st.chat_input("Ask SmartBoyAI about the Gatekeeper data...")
 
 if user_prompt:
     st.session_state["messages"].append(

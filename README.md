@@ -6,4 +6,15 @@ The AI does not directly access the database by itself. Instead, the Streamlit a
 
 This follows the same general idea as retrieval-augmented generation, where relevant external information is retrieved and provided to an AI model as context. However, this project does not directly use the LangChain library. The retrieval/context process was implemented manually using Python, pandas, SQLite, Streamlit, and Groq.
 
-To protect sensitive information, SmartBoyAI does not send user account data, password hashes, API keys, or full raw database tables to the AI. It only sends safe dashboard-style summaries and limited matching records when they are relevant to the user’s question.
+To protect sensitive information, SmartBoyAI does not send user account data, password hashes, API keys, or full raw database tables to the AI. It only sends safe dashboard-style summaries and limited relevant dashboard rows when they are useful for answering the user’s question.
+
+### SmartBoyAI Data Privacy Note
+
+SmartBoyAI uses database summaries to answer project-related questions, but it does not send user login information to the AI. Passwords are stored as hashes, and account data is kept separate from the AI context. This helps the assistant provide useful dashboard insights while reducing the risk of exposing sensitive information.
+
+### References
+
+- Streamlit documentation was used for the chat interface and session state features.
+- Streamlit secrets management documentation was used for storing the Groq API key outside the source code.
+- Groq documentation was used for connecting the app to the AI model.
+- LangChain retrieval-augmented generation documentation was used as a conceptual reference for retrieving project data and passing it to an AI model as context. The project does not directly use the LangChain library.
