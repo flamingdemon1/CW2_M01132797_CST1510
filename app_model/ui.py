@@ -1,8 +1,20 @@
 """Reusable Streamlit presentation helpers for the Gatekeeper interface."""
 
+from base64 import b64encode
 from html import escape
+from pathlib import Path
 
 import streamlit as st
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+IMAGE_MIME_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".svg": "image/svg+xml",
+}
 
 
 THEME_CSS = """
@@ -88,6 +100,16 @@ THEME_CSS = """
         font-size: 1.35rem;
         font-weight: 800;
         box-shadow: 0 0 20px rgba(34, 211, 238, 0.12);
+    }
+
+    .gk-brand-image {
+        display: block;
+        width: 34px;
+        height: 34px;
+        max-width: 100%;
+        max-height: 100%;
+        border-radius: 4px;
+        object-fit: contain;
     }
 
     .gk-eyebrow {
@@ -409,15 +431,65 @@ def _accent_colour(accent):
     return ACCENT_COLOURS.get(accent, ACCENT_COLOURS["cyan"])
 
 
-def page_header(title, subtitle, status="SYSTEM ONLINE", status_accent="green"):
+def _image_data_uri(image_path):
+    """Convert a local image into a data URI for use inside custom HTML."""
+    if not image_path:
+        return ""
+
+    try:
+        path = Path(image_path).expanduser()
+    except TypeError:
+        return ""
+
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+
+    mime_type = IMAGE_MIME_TYPES.get(path.suffix.lower())
+
+    if mime_type is None or not path.is_file():
+        return ""
+
+    try:
+        image_bytes = path.read_bytes()
+    except OSError:
+        return ""
+
+    if not image_bytes:
+        return ""
+
+    encoded_image = b64encode(image_bytes).decode("ascii")
+
+    return f"data:{mime_type};base64,{encoded_image}"
+
+
+def page_header(
+    title,
+    subtitle,
+    status="SYSTEM ONLINE",
+    status_accent="green",
+    logo_path=None,
+    logo_text="G",
+    logo_alt="Gatekeeper logo",
+):
     """Display a consistent Gatekeeper page heading."""
     status_colours = STATUS_STYLES.get(status_accent, STATUS_STYLES["green"])
     status_colour, status_border, status_background = status_colours
 
+    logo_data_uri = _image_data_uri(logo_path)
+
+    if logo_data_uri:
+        logo_html = (
+            f'<img class="gk-brand-image" src="{escape(logo_data_uri)}" '
+            f'alt="{escape(str(logo_alt))}">'
+        )
+    else:
+        fallback_text = "G" if logo_text in (None, "") else str(logo_text)
+        logo_html = f'<span aria-hidden="true">{escape(fallback_text)}</span>'
+
     st.markdown(
         f"""
         <header class="gk-page-header">
-            <div class="gk-brand-mark" aria-hidden="true">G</div>
+            <div class="gk-brand-mark">{logo_html}</div>
             <div>
                 <p class="gk-eyebrow">Gatekeeper / Security Operations</p>
                 <h1 class="gk-page-title">{escape(str(title))}</h1>

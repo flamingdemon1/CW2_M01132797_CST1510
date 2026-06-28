@@ -6,11 +6,10 @@ from main import generate_hash, is_valid_hash
 
 st.set_page_config(
     page_title="Gatekeeper Home",
-    page_icon="H",
+    page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
-
 ui.apply_theme()
 
 
@@ -207,6 +206,9 @@ ui.page_header(
     "Gatekeeper",
     "Cyber Incident Intelligence System",
     status=header_status,
+    logo_path="assets/logos/gatekeeper_logo.png",
+    logo_text="🛡️",
+    logo_alt="Gatekeeper logo",
 )
 
 if st.session_state["logged_in"]:

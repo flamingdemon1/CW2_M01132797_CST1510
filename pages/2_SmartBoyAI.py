@@ -8,7 +8,7 @@ from app_model.logic import cyber_incidents, it_tickets, metadatas
 
 st.set_page_config(
     page_title="SmartBoyAI",
-    page_icon="S",
+    page_icon="🤖",
     layout="wide",
     initial_sidebar_state="auto",
 )
@@ -29,6 +29,9 @@ if not st.session_state["logged_in"]:
         "Authentication is required to open SmartBoyAI Assistant.",
         status="ACCESS DENIED",
         status_accent="red",
+        logo_path="assets/logos/smartboyai_logo.png",
+        logo_text="AI",
+        logo_alt="SmartBoyAI logo",
     )
     ui.status_card(
         "Protected route",
@@ -387,8 +390,10 @@ ui.page_header(
     "Database-aware cybersecurity and IT support",
     status=ai_status,
     status_accent=ai_status_accent,
+    logo_path="assets/logos/smartboyai_logo.png",
+    logo_text="AI",
+    logo_alt="SmartBoyAI logo",
 )
-
 session_column, safety_column = st.columns(2)
 
 with session_column:

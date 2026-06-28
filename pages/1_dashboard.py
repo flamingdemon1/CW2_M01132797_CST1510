@@ -6,7 +6,7 @@ from app_model.logic import cyber_incidents
 
 st.set_page_config(
     page_title="Cyber Incident Dashboard",
-    page_icon="D",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="auto",
 )
@@ -27,6 +27,9 @@ if not st.session_state["logged_in"]:
         "Authentication is required to open the Security Dashboard.",
         status="ACCESS DENIED",
         status_accent="red",
+        logo_path="assets/logos/dashboard_logo.png",
+        logo_text="D",
+        logo_alt="Dashboard logo",
     )
     ui.status_card(
         "Protected route",
@@ -70,6 +73,9 @@ ui.page_header(
     "Security Dashboard",
     "Cyber incident monitoring and operational intelligence",
     status="DATA LINK ACTIVE",
+    logo_path="assets/logos/dashboard_logo.png",
+    logo_text="D",
+    logo_alt="Dashboard logo",
 )
 ui.status_card(
     "Authenticated operator",
