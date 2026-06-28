@@ -1,13 +1,13 @@
-def add_user(conn, username, password_hash):
+def add_user(conn, username, password_hash, email=None):
     """Add a new user to the users table."""
     cursor = conn.cursor()
 
     sql = """
-    INSERT INTO users (username, password_hash)
-    VALUES (?, ?);
+    INSERT INTO users (username, password_hash, email)
+    VALUES (?, ?, ?);
     """
 
-    cursor.execute(sql, (username, password_hash))
+    cursor.execute(sql, (username, password_hash, email))
     conn.commit()
 
 
@@ -65,6 +65,22 @@ def update_password(conn, username, new_password_hash):
     """
 
     cursor.execute(sql, (new_password_hash, username))
+    conn.commit()
+
+    return cursor.rowcount > 0
+
+
+def update_email(conn, username, new_email):
+    """Update a user's recovery email address."""
+    cursor = conn.cursor()
+
+    sql = """
+    UPDATE users
+    SET email = ?
+    WHERE username = ?;
+    """
+
+    cursor.execute(sql, (new_email, username))
     conn.commit()
 
     return cursor.rowcount > 0

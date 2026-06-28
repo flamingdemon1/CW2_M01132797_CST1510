@@ -3,6 +3,24 @@
 import streamlit as st
 
 
+def is_valid_email(email):
+    """Return True when an email has a simple valid address structure."""
+    email = email.strip()
+
+    if email.count("@") != 1 or " " in email:
+        return False
+
+    local_part, domain = email.split("@")
+
+    if not local_part or not domain or "." not in domain:
+        return False
+
+    if domain.startswith(".") or domain.endswith("."):
+        return False
+
+    return True
+
+
 def get_password_errors(password):
     """Return a list of password requirements that are not satisfied."""
     errors = []

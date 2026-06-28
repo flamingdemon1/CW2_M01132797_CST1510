@@ -1,7 +1,6 @@
 """Protected Gatekeeper profile and password management page."""
 
 import streamlit as st
-
 from app_model import db, schema, ui, users
 from app_model.security import display_password_strength, get_password_errors
 from main import generate_hash, is_valid_hash
@@ -69,6 +68,12 @@ def change_password(username, current_password, new_password, confirm_password):
 
         if new_password != confirm_password:
             return False, "The new passwords do not match."
+
+        if is_valid_hash(new_password, user["password_hash"]):
+            return (
+                False,
+                "The new password must be different from your current password.",
+            )
 
         if get_password_errors(new_password):
             return (
@@ -184,18 +189,24 @@ with st.container(border=True):
         key="profile_new_password",
     )
     display_password_strength(new_password)
-    confirm_password = st.text_input(
-        "Confirm new password",
-        type="password",
-        key="profile_confirm_password",
-    )
 
-    change_submitted = st.button(
-        "Change password",
-        type="primary",
-        icon=":material/lock_reset:",
-        use_container_width=True,
-    )
+    # Enter submits only after the user reaches the confirmation field.
+    with st.form(
+        "profile_password_submit_form",
+        enter_to_submit=True,
+        border=False,
+    ):
+        confirm_password = st.text_input(
+            "Confirm new password",
+            type="password",
+            key="profile_confirm_password",
+        )
+        change_submitted = st.form_submit_button(
+            "Change password",
+            type="primary",
+            icon=":material/lock_reset:",
+            use_container_width=True,
+        )
 
 if change_submitted:
     password_changed, result_message = change_password(

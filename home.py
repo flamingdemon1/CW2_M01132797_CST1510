@@ -5,6 +5,7 @@ from app_model.security import (
     display_password_strength,
     get_password_errors,
     get_password_strength,
+    is_valid_email,
 )
 from main import generate_hash, is_valid_hash
 
@@ -25,12 +26,17 @@ if "username" not in st.session_state:
     st.session_state["username"] = ""
 
 
-def register_streamlit_user(username, password):
+def register_streamlit_user(username, password, email=""):
     """Register a new user in the SQLite users table."""
     username = username.strip()
+    email = email.strip().lower()
 
-    if username == "" or password == "":
-        st.error("Please enter both a username and a password.")
+    if username == "" or email == "" or password == "":
+        st.error("Please enter a username, recovery email, and password.")
+        return
+
+    if not is_valid_email(email):
+        st.error("Please enter a valid recovery email address.")
         return
 
     password_errors = get_password_errors(password)
@@ -53,7 +59,7 @@ def register_streamlit_user(username, password):
             return
 
         password_hash = generate_hash(password)
-        users.add_user(conn, username, password_hash)
+        users.add_user(conn, username, password_hash, email)
         st.success("Registration successful. You can now log in.")
 
     except sqlite3.IntegrityError:
@@ -216,6 +222,13 @@ else:
                     use_container_width=True,
                 )
 
+            if st.button(
+                "Forgot password?",
+                icon=":material/lock_reset:",
+                use_container_width=True,
+            ):
+                st.switch_page("pages/4_Forgot_Password.py")
+
             if login_submitted:
                 login_streamlit_user(login_username, login_password)
 
@@ -226,18 +239,36 @@ else:
             # Regular widgets allow the strength display to update as the value changes.
             with st.container(border=True):
                 register_username = st.text_input("New username")
+                register_email = st.text_input("Recovery email")
                 register_password = st.text_input(
                     "New password",
                     type="password"
                 )
                 display_password_strength(register_password)
 
-                register_submitted = st.button(
-                    "Register",
-                    type="primary",
-                    icon=":material/person_add:",
-                    use_container_width=True,
-                )
+                # The final field is in a form so Enter submits registration.
+                with st.form(
+                    "registration_submit_form",
+                    enter_to_submit=True,
+                    border=False,
+                ):
+                    register_confirm_password = st.text_input(
+                        "Confirm new password",
+                        type="password",
+                    )
+                    register_submitted = st.form_submit_button(
+                        "Register",
+                        type="primary",
+                        icon=":material/person_add:",
+                        use_container_width=True,
+                    )
 
             if register_submitted:
-                register_streamlit_user(register_username, register_password)
+                if register_password != register_confirm_password:
+                    st.error("The passwords do not match.")
+                else:
+                    register_streamlit_user(
+                        register_username,
+                        register_password,
+                        register_email,
+                    )
