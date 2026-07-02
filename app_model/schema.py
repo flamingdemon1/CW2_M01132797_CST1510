@@ -23,3 +23,22 @@ def create_user_table(conn):
         cursor.execute("ALTER TABLE users ADD COLUMN email TEXT;")
 
     conn.commit()
+
+
+def create_saved_results_table(conn):
+    """Create the table used for saved CLI results if it is missing."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS saved_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT,
+            result_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            save_source TEXT NOT NULL
+        );
+        """
+    )
+    conn.commit()

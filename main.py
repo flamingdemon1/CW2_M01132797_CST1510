@@ -1,8 +1,6 @@
 import sqlite3
 from getpass import getpass
-
 import bcrypt
-
 from app_model import db, schema, users as user_model
 from app_model.logic import cyber_incidents, metadatas, it_tickets
 

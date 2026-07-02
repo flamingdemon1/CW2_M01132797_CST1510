@@ -8,6 +8,22 @@ This follows the same general idea as retrieval-augmented generation, where rele
 
 To protect sensitive information, SmartBoyAI does not send user account data, password hashes, API keys, or full raw database tables to the AI. It only sends safe dashboard-style summaries and limited relevant dashboard rows when they are useful for answering the user’s question.
 
+### CLI Result Saving
+
+After previewing migrated data in the Rich CLI, a logged-in user can choose to
+save the five-row result as a UTF-8 text file, a CSV file, or a record in the
+project SQLite database. File exports are created in `DATA/exports/`. SQLite
+exports are stored in the `saved_results` table and can be viewed later using
+CLI menu option 12. Normal users can view their own saved records, while admins
+can view all saved records.
+
+The `saved_results` table stores the username, result type, title, text content,
+creation time, and save source. Passwords, password hashes, and API keys are not
+included in exported results.
+
+Any additional external CSV datasets added in future coursework stages should
+come from genuine sources, and their source links should be recorded clearly.
+
 ### SmartBoyAI Data Privacy Note
 
 SmartBoyAI uses database summaries to answer project-related questions, but it does not send user login information to the AI. Passwords are stored as hashes, and account data is kept separate from the AI context. This helps the assistant provide useful dashboard insights while reducing the risk of exposing sensitive information.
