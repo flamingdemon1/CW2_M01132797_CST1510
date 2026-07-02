@@ -40,6 +40,7 @@ python-dotenv==1.2.2
 python-multipart==0.0.32
 referencing==0.37.0
 requests==2.34.2
+rich>=13.7.0
 rpds-py==2026.5.1
 sendgrid==6.12.5
 six==1.17.0
