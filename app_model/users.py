@@ -25,6 +25,33 @@ def get_user(conn, username):
     return cursor.fetchone()
 
 
+def get_user_by_username_or_email(conn, identifier):
+    """Return one user matching a username or recovery email."""
+    cursor = conn.cursor()
+
+    username_sql = """
+    SELECT *
+    FROM users
+    WHERE username = ?;
+    """
+    cursor.execute(username_sql, (identifier,))
+    username_match = cursor.fetchone()
+
+    if username_match is not None:
+        return username_match
+
+    email_sql = """
+    SELECT *
+    FROM users
+    WHERE LOWER(email) = LOWER(?);
+    """
+    cursor.execute(email_sql, (identifier,))
+    email_matches = cursor.fetchall()
+
+    # A shared email is ambiguous, so recovery must use the username instead.
+    return email_matches[0] if len(email_matches) == 1 else None
+
+
 def get_all_users(conn):
     """Return all users from the users table."""
     cursor = conn.cursor()

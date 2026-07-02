@@ -1,7 +1,24 @@
+"""Protected cyber incident dashboard for Gatekeeper."""
+
+import math
+
+import altair as alt
 import pandas as pd
 import streamlit as st
+
 from app_model import db, ui
 from app_model.logic import cyber_incidents
+
+
+REQUIRED_INCIDENT_COLUMNS = {
+    "timestamp",
+    "severity",
+    "category",
+    "status",
+}
+PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
+SEVERITY_ORDER = ["Critical", "High", "Medium", "Low"]
+CHART_HEIGHT = 270
 
 
 st.set_page_config(
@@ -11,14 +28,12 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
+for key, default_value in {"logged_in": False, "username": ""}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default_value
+
 ui.apply_theme()
-
-
-if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
-
-if "username" not in st.session_state:
-    st.session_state["username"] = ""
+ui.sidebar_logo("assets/logos/dashboard_logo.png")
 
 
 if not st.session_state["logged_in"]:
@@ -27,16 +42,9 @@ if not st.session_state["logged_in"]:
         "Authentication is required to open the Security Dashboard.",
         status="ACCESS DENIED",
         status_accent="red",
-        logo_path="assets/logos/dashboard_logo.png",
-        logo_text="D",
-        logo_alt="Dashboard logo",
     )
-    ui.status_card(
-        "Protected route",
-        "Return to Gatekeeper home and authenticate before viewing incident data.",
-        accent="red",
-    )
-    st.markdown('<div style="height: 1.25rem;"></div>', unsafe_allow_html=True)
+    st.warning("🔒 Return to Gatekeeper home and authenticate to view incident data.")
+    ui.route_spacing()
 
     if st.button("Go to home page", icon=":material/home:"):
         st.switch_page("home.py")
@@ -44,20 +52,11 @@ if not st.session_state["logged_in"]:
     st.stop()
 
 
-ui.sidebar_user(st.session_state["username"])
-
-if st.sidebar.button(
-    "Log out",
-    icon=":material/logout:",
-    use_container_width=True,
-):
-    st.session_state["logged_in"] = False
-    st.session_state["username"] = ""
-    st.switch_page("home.py")
+ui.content_profile_control()
 
 
 def load_cyber_incident_data():
-    """Load cyber incident data from the SQLite database."""
+    """Load and validate cyber incident data from SQLite."""
     conn = db.get_connection()
 
     try:
@@ -65,150 +64,329 @@ def load_cyber_incident_data():
     finally:
         conn.close()
 
-    data["timestamp"] = pd.to_datetime(data["timestamp"], errors="coerce")
+    missing_columns = REQUIRED_INCIDENT_COLUMNS.difference(data.columns)
 
+    if missing_columns:
+        missing_names = ", ".join(sorted(missing_columns))
+        raise ValueError(f"Missing expected columns: {missing_names}")
+
+    data = data.copy()
+    data["timestamp"] = pd.to_datetime(data["timestamp"], errors="coerce")
     return data
+
+
+def style_chart(chart):
+    """Apply readable colours for the selected Gatekeeper theme."""
+    colours = ui.get_chart_colours()
+    return (
+        chart.properties(background=colours["background"])
+        .configure_axis(
+            labelColor=colours["text"],
+            titleColor=colours["text"],
+            gridColor=colours["grid"],
+            domainColor=colours["grid"],
+        )
+        .configure_legend(
+            labelColor=colours["text"],
+            titleColor=colours["text"],
+        )
+        .configure_view(strokeOpacity=0)
+    )
+
+
+ui.sidebar_user(st.session_state["username"])
+
+if st.sidebar.button(
+    "Log out",
+    icon=":material/logout:",
+    width="stretch",
+):
+    ui.logout()
+    st.switch_page("home.py")
 
 
 ui.page_header(
     "Security Dashboard",
     "Cyber incident monitoring and operational intelligence",
     status="DATA LINK ACTIVE",
-    logo_path="assets/logos/dashboard_logo.png",
-    logo_text="D",
-    logo_alt="Dashboard logo",
 )
-ui.status_card(
-    "Authenticated operator",
-    f"Incident workspace active for {st.session_state['username']}.",
-    accent="green",
-)
+
 
 try:
     data = load_cyber_incident_data()
+except Exception as error:
+    st.error("The cyber incident data could not be loaded from SQLite.")
+    st.info(
+        "Make sure the CSV datasets have been migrated using the CLI migration "
+        "option in main.py."
+    )
+    st.caption(f"Technical detail: {error}")
+    st.stop()
 
-    if data.empty:
-        ui.status_card(
-            "No incident records available",
-            "Use option 6 in main.py to migrate the CSV data into SQLite.",
-            accent="amber",
-        )
-        st.stop()
+if data.empty:
+    st.warning(
+        "No cyber incidents are available. Migrate the CSV datasets into SQLite "
+        "before opening the dashboard."
+    )
+    st.stop()
 
-    st.sidebar.markdown("### Incident filters")
-    st.sidebar.caption("Filter every dashboard view by incident severity.")
+st.sidebar.markdown("### 🎛️ Incident filters")
+st.sidebar.caption("The severity filter updates metrics, charts, and records.")
 
-    severity_options = ["All"] + sorted(data["severity"].dropna().unique().tolist())
+severity_values = sorted(data["severity"].dropna().astype(str).unique().tolist())
+selected_severity = st.sidebar.selectbox(
+    "Incident severity",
+    ["All"] + severity_values,
+)
 
-    selected_severity = st.sidebar.selectbox(
-        "Select incident severity:",
-        severity_options
+if selected_severity == "All":
+    filtered_data = data.copy()
+    filter_note = "All severity levels"
+else:
+    filtered_data = data[data["severity"].astype(str) == selected_severity].copy()
+    filter_note = f"{selected_severity} severity only"
+
+if filtered_data.empty:
+    st.warning("No incident records match the selected filters.")
+    st.stop()
+
+ui.status_card(
+    "Authenticated operator",
+    f"Workspace active for {st.session_state['username']} · {filter_note}",
+    accent="green",
+)
+
+ui.section_heading(
+    "Incident summary",
+    "Current totals for the selected severity scope.",
+)
+metric_one, metric_two, metric_three, metric_four = st.columns(4)
+
+with metric_one:
+    ui.metric_card(
+        "Total incidents",
+        len(filtered_data),
+        note="Records in the active scope",
+        accent="cyan",
     )
 
-    if selected_severity == "All":
-        filtered_data = data
-    else:
-        filtered_data = data[data["severity"] == selected_severity]
-
-    ui.section_heading(
-        "Incident summary",
-        "Current totals for the selected severity scope.",
-    )
-
-    if selected_severity == "All":
-        filter_note = "All severity levels"
-    else:
-        filter_note = f"{selected_severity} severity only"
-
-    ui.status_card(
-        "Active data scope",
-        filter_note,
+with metric_two:
+    ui.metric_card(
+        "Categories",
+        filtered_data["category"].nunique(),
+        note="Distinct classifications",
         accent="blue",
     )
 
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        ui.metric_card(
-            "Total incidents",
-            len(filtered_data),
-            note="Records in the active scope",
-            accent="cyan",
-        )
-
-    with col2:
-        ui.metric_card(
-            "Unique categories",
-            filtered_data["category"].nunique(),
-            note="Distinct incident classifications",
-            accent="blue",
-        )
-
-    with col3:
-        ui.metric_card(
-            "Unique statuses",
-            filtered_data["status"].nunique(),
-            note="Distinct workflow states",
-            accent="green",
-        )
-
-    ui.section_heading(
-        "Incident visualisations",
-        "Category and status distribution for the active data scope.",
+with metric_three:
+    ui.metric_card(
+        "Statuses",
+        filtered_data["status"].nunique(),
+        note="Distinct workflow states",
+        accent="green",
     )
 
-    chart_col1, chart_col2 = st.columns(2)
-
-    with chart_col1:
-        with st.container(border=True):
-            st.markdown("#### Incidents by category")
-            st.caption("Frequency of each cyber incident classification.")
-
-            category_counts = filtered_data["category"].value_counts().reset_index()
-            category_counts.columns = ["Category", "Number of incidents"]
-
-            st.bar_chart(
-                category_counts,
-                x="Category",
-                y="Number of incidents",
-                color="#22D3EE",
-            )
-
-    with chart_col2:
-        with st.container(border=True):
-            st.markdown("#### Incidents by status")
-            st.caption("Distribution across open, resolved, and closed states.")
-
-            status_counts = filtered_data["status"].value_counts().reset_index()
-            status_counts.columns = ["Status", "Number of incidents"]
-
-            st.bar_chart(
-                status_counts,
-                x="Status",
-                y="Number of incidents",
-                color="#34D399",
-            )
-
-    ui.section_heading(
-        "Incident records",
-        "Detailed records matching the selected severity filter.",
-    )
-
-    st.dataframe(filtered_data, width="stretch")
-
-    ui.section_heading("Operational insight")
-    ui.section_card(
-        "What this view highlights",
-        "This dashboard helps identify the most common cyber incident categories "
-        "and shows the current status of reported incidents. The severity filter "
-        "allows users to focus on specific risk levels and inspect matching records.",
+with metric_four:
+    valid_dates = filtered_data["timestamp"].dropna()
+    latest_date = valid_dates.max().strftime("%d %b %Y") if not valid_dates.empty else "N/A"
+    ui.metric_card(
+        "Latest incident",
+        latest_date,
+        note="Most recent valid timestamp",
         accent="amber",
     )
 
-except Exception as error:
-    st.error("The cyber incident data could not be loaded.")
-    st.info(
-        "Make sure you have migrated the CSV datasets into SQLite using option 6 "
-        "in main.py."
+
+ui.section_heading(
+    "Incident visualisations",
+    "Charts use the same active severity filter as the table below.",
+)
+chart_column_one, chart_column_two = st.columns(2)
+
+category_counts = (
+    filtered_data["category"]
+    .fillna("Unknown")
+    .value_counts()
+    .rename_axis("Category")
+    .reset_index(name="Incidents")
+    .sort_values("Incidents", ascending=False)
+)
+
+status_counts = (
+    filtered_data["status"]
+    .fillna("Unknown")
+    .value_counts()
+    .rename_axis("Status")
+    .reset_index(name="Incidents")
+    .sort_values("Incidents", ascending=False)
+)
+
+with chart_column_one:
+    with st.container(border=True):
+        st.subheader("📂 Incidents by category")
+        st.caption(
+            "Categories are sorted from most to least common. Hover for exact totals."
+        )
+        category_chart = (
+            alt.Chart(category_counts)
+            .mark_bar(color="#0891b2", cornerRadiusEnd=3)
+            .encode(
+                y=alt.Y("Category:N", sort="-x", title=None),
+                x=alt.X("Incidents:Q", title="Number of incidents"),
+                tooltip=["Category:N", "Incidents:Q"],
+            )
+            .properties(height=CHART_HEIGHT)
+        )
+        st.altair_chart(style_chart(category_chart), width="stretch")
+
+with chart_column_two:
+    with st.container(border=True):
+        st.subheader("✅ Incidents by status")
+        st.caption(
+            "Statuses are sorted to show where reports sit in the response workflow."
+        )
+        status_chart = (
+            alt.Chart(status_counts)
+            .mark_bar(color="#059669", cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+            .encode(
+                x=alt.X("Status:N", sort="-y", title=None),
+                y=alt.Y("Incidents:Q", title="Number of incidents"),
+                tooltip=["Status:N", "Incidents:Q"],
+            )
+            .properties(height=CHART_HEIGHT)
+        )
+        st.altair_chart(style_chart(status_chart), width="stretch")
+
+
+detail_column_one, detail_column_two = st.columns(2)
+
+heatmap_data = (
+    filtered_data.assign(
+        severity=filtered_data["severity"].fillna("Unknown"),
+        category=filtered_data["category"].fillna("Unknown"),
     )
-    st.caption(f"Technical detail: {error}")
+    .groupby(["severity", "category"])
+    .size()
+    .reset_index(name="Incidents")
+)
+
+with detail_column_one:
+    with st.container(border=True):
+        st.subheader("🔥 Severity and category heatmap")
+        st.caption(
+            "Darker cells identify category and severity combinations with more reports."
+        )
+        heatmap = (
+            alt.Chart(heatmap_data)
+            .mark_rect(cornerRadius=2)
+            .encode(
+                x=alt.X("category:N", title="Category"),
+                y=alt.Y(
+                    "severity:N",
+                    title="Severity",
+                    sort=SEVERITY_ORDER,
+                ),
+                color=alt.Color(
+                    "Incidents:Q",
+                    scale=alt.Scale(scheme="tealblues"),
+                    title="Incidents",
+                ),
+                tooltip=["severity:N", "category:N", "Incidents:Q"],
+            )
+            .properties(height=CHART_HEIGHT)
+        )
+        st.altair_chart(style_chart(heatmap), width="stretch")
+
+with detail_column_two:
+    with st.container(border=True):
+        st.subheader("📈 Incidents over time")
+        st.caption("Daily report volume reveals peaks and changes in incident activity.")
+
+        trend_data = filtered_data.dropna(subset=["timestamp"]).copy()
+
+        if trend_data.empty:
+            st.info("No valid timestamps are available for a time trend.")
+        else:
+            trend_data["Date"] = trend_data["timestamp"].dt.date
+            trend_counts = (
+                trend_data.groupby("Date").size().reset_index(name="Incidents")
+            )
+            trend_chart = (
+                alt.Chart(trend_counts)
+                .mark_line(point=True, color="#2563eb", strokeWidth=2)
+                .encode(
+                    x=alt.X("Date:T", title="Date"),
+                    y=alt.Y("Incidents:Q", title="Number of incidents"),
+                    tooltip=[
+                        alt.Tooltip("Date:T", title="Date"),
+                        alt.Tooltip("Incidents:Q", title="Incidents"),
+                    ],
+                )
+                .properties(height=CHART_HEIGHT)
+            )
+            st.altair_chart(style_chart(trend_chart), width="stretch")
+
+
+ui.section_heading(
+    "Incident records",
+    "Browse the filtered SQLite records in manageable pages.",
+)
+
+page_size = st.selectbox(
+    "Records per page",
+    PAGE_SIZE_OPTIONS,
+    index=1,
+    key="dashboard_page_size",
+)
+
+page_signature = f"{selected_severity}:{page_size}:{len(filtered_data)}"
+
+if st.session_state.get("dashboard_page_signature") != page_signature:
+    st.session_state["dashboard_page"] = 1
+    st.session_state["dashboard_page_signature"] = page_signature
+
+total_records = len(filtered_data)
+total_pages = max(1, math.ceil(total_records / page_size))
+current_page = min(st.session_state.get("dashboard_page", 1), total_pages)
+st.session_state["dashboard_page"] = current_page
+
+start_index = (current_page - 1) * page_size
+end_index = min(start_index + page_size, total_records)
+page_data = filtered_data.iloc[start_index:end_index]
+
+previous_column, page_column, next_column = st.columns([1, 3, 1])
+
+with previous_column:
+    if st.button(
+        "Previous",
+        icon=":material/chevron_left:",
+        disabled=current_page == 1,
+        width="stretch",
+    ):
+        st.session_state["dashboard_page"] -= 1
+        st.rerun()
+
+with page_column:
+    st.markdown(f"**Page {current_page} of {total_pages}**")
+
+with next_column:
+    if st.button(
+        "Next",
+        icon=":material/chevron_right:",
+        disabled=current_page == total_pages,
+        width="stretch",
+    ):
+        st.session_state["dashboard_page"] += 1
+        st.rerun()
+
+st.caption(f"Showing records {start_index + 1}–{end_index} of {total_records}")
+st.dataframe(ui.style_dataframe(page_data), width="stretch", hide_index=True)
+
+ui.section_heading("Operational insight")
+ui.section_card(
+    "💡 What this view highlights",
+    "The sorted charts reveal common classifications and workflow states, while "
+    "the heatmap shows where severity and category overlap. The time trend helps "
+    "operators identify changes in reporting activity.",
+    accent="amber",
+)

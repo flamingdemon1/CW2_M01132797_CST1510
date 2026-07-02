@@ -13,20 +13,32 @@ SENDGRID_PLACEHOLDERS = {
 }
 
 
-def is_demo_mode_enabled():
-    """Return whether failed email requests may show a code on screen."""
+def is_local_reset_fallback_enabled():
+    """Return whether local testing may show an undelivered reset code."""
     try:
-        setting = st.secrets.get("PASSWORD_RESET_DEMO_MODE", None)
+        setting = st.secrets.get("ALLOW_LOCAL_RESET_FALLBACK", None)
+
+        # Keep older local settings working while the new name is adopted.
+        if setting is None:
+            setting = st.secrets.get("PASSWORD_RESET_DEMO_MODE", None)
     except Exception:
         setting = None
 
     if setting is None:
-        setting = os.getenv("PASSWORD_RESET_DEMO_MODE", "true")
+        setting = os.getenv("ALLOW_LOCAL_RESET_FALLBACK")
+
+    if setting is None:
+        setting = os.getenv("PASSWORD_RESET_DEMO_MODE", "false")
 
     if isinstance(setting, bool):
         return setting
 
     return str(setting).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def is_demo_mode_enabled():
+    """Backward-compatible alias for older coursework code."""
+    return is_local_reset_fallback_enabled()
 
 
 def get_sendgrid_settings():

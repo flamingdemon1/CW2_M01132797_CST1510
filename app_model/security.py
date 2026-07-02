@@ -103,23 +103,8 @@ def display_password_strength(password):
         st.caption("Start typing a password to see its strength.")
         return
 
-    label, score, colour, feedback = get_password_strength(password)
+    label, score, _colour, feedback = get_password_strength(password)
 
-    st.markdown(
-        f"""
-        <div style="max-width: 520px; margin-top: 0.25rem;
-                    margin-bottom: 0.25rem;">
-            <div style="display: flex; align-items: baseline; gap: 0.6rem;">
-                <strong>Password strength: {label}</strong>
-                <span style="color: {colour}; font-size: 0.9rem;">{score}%</span>
-            </div>
-            <div style="background-color: #1E293B; height: 10px;
-                        border-radius: 5px; overflow: hidden; margin-top: 6px;">
-                <div style="background-color: {colour}; width: {score}%;
-                            height: 10px;"></div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    # A native Streamlit progress bar reruns naturally when the input changes.
+    st.progress(score, text=f"Password strength: {label} ({score}%)")
     st.caption(feedback)

@@ -6,6 +6,69 @@ from app_model import db, ui
 from app_model.logic import cyber_incidents, it_tickets, metadatas
 
 
+SCOPE_REFUSAL = (
+    "I can only help with the Gatekeeper cybersecurity dashboard, incidents, "
+    "IT tickets, dataset metadata and related IT/cybersecurity support. Please "
+    "ask a question related to those areas."
+)
+
+ALLOWED_SCOPE_TERMS = {
+    "gatekeeper",
+    "dashboard",
+    "incident",
+    "severity",
+    "category",
+    "status",
+    "ticket",
+    "dataset",
+    "metadata",
+    "database",
+    "sqlite",
+    "cyber",
+    "security",
+    "phishing",
+    "malware",
+    "ddos",
+    "misconfiguration",
+    "unauthorized access",
+    "risk",
+    "threat",
+    "vulnerability",
+    "network",
+    "password",
+    "authentication",
+    "login",
+    "server",
+    "software",
+    "hardware",
+    "technical support",
+    "it support",
+}
+
+UNRELATED_TERMS = {
+    "recipe",
+    "cook",
+    "food",
+    "restaurant",
+    "movie",
+    "music",
+    "celebrity",
+    "horoscope",
+    "relationship advice",
+    "fashion",
+    "holiday",
+    "travel itinerary",
+    "joke",
+    "football",
+    "soccer",
+    "sports score",
+    "dating advice",
+    "life advice",
+    "poem",
+    "fiction story",
+}
+
+
 st.set_page_config(
     page_title="SmartBoyAI",
     page_icon="🤖",
@@ -14,6 +77,7 @@ st.set_page_config(
 )
 
 ui.apply_theme()
+ui.sidebar_logo("assets/logos/smartboyai_logo.png")
 
 
 if "logged_in" not in st.session_state:
@@ -22,23 +86,19 @@ if "logged_in" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state["username"] = ""
 
-
 if not st.session_state["logged_in"]:
     ui.page_header(
         "Restricted Area",
         "Authentication is required to open SmartBoyAI Assistant.",
         status="ACCESS DENIED",
         status_accent="red",
-        logo_path="assets/logos/smartboyai_logo.png",
-        logo_text="AI",
-        logo_alt="SmartBoyAI logo",
     )
     ui.status_card(
         "Protected route",
         "Return to Gatekeeper home and authenticate before opening the AI workspace.",
         accent="red",
     )
-    st.markdown('<div style="height: 1.25rem;"></div>', unsafe_allow_html=True)
+    ui.route_spacing()
 
     if st.button("Go to home page", icon=":material/home:"):
         st.switch_page("home.py")
@@ -46,15 +106,17 @@ if not st.session_state["logged_in"]:
     st.stop()
 
 
+ui.content_profile_control()
+
+
 ui.sidebar_user(st.session_state["username"])
 
 if st.sidebar.button(
     "Log out",
     icon=":material/logout:",
-    use_container_width=True,
+    width="stretch",
 ):
-    st.session_state["logged_in"] = False
-    st.session_state["username"] = ""
+    ui.logout()
     st.switch_page("home.py")
 
 
@@ -64,6 +126,39 @@ def get_groq_api_key():
         return st.secrets["GROQ_API_KEY"]
     except Exception:
         return os.getenv("GROQ_API_KEY", "")
+
+
+def is_prompt_in_scope(prompt, earlier_messages):
+    """Return True only for Gatekeeper, cybersecurity, or IT support prompts."""
+    prompt_lower = prompt.strip().lower()
+
+    if any(term in prompt_lower for term in ALLOWED_SCOPE_TERMS):
+        return True
+
+    if any(term in prompt_lower for term in UNRELATED_TERMS):
+        return False
+
+    if prompt_lower in {"hi", "hello", "hey", "help", "what can you do?"}:
+        return True
+
+    # Short follow-up questions may rely on an earlier in-scope user message.
+    recent_user_messages = [
+        message["content"].lower()
+        for message in earlier_messages[-6:]
+        if message.get("role") == "user"
+    ]
+    recent_context_is_in_scope = any(
+        term in earlier_message
+        for earlier_message in recent_user_messages
+        for term in ALLOWED_SCOPE_TERMS
+    )
+
+    if recent_context_is_in_scope:
+        return True
+
+    # Vague prompts are allowed. The system prompt keeps the answer in scope
+    # and asks for clarification when there is no useful conversation context.
+    return True
 
 
 def load_table(conn, table_name, load_function):
@@ -192,8 +287,10 @@ def create_database_context(question):
         "It never includes user accounts, login details, API keys, or password hashes.",
         "Do not say that the user can see this context on the page."
     ]
+    available_data_found = False
 
     if not cyber_data.empty:
+        available_data_found = True
         summary_parts.extend([
             "",
             "Cyber incident summary:",
@@ -232,6 +329,7 @@ def create_database_context(question):
         )
 
     if not ticket_data.empty:
+        available_data_found = True
         summary_parts.extend([
             "",
             "IT ticket summary:",
@@ -277,6 +375,7 @@ def create_database_context(question):
         )
 
     if not metadata_data.empty:
+        available_data_found = True
         total_rows = "Not available."
         average_columns = "Not available."
         dataset_names = "Not available."
@@ -325,7 +424,7 @@ def create_database_context(question):
             "must be migrated into SQLite first."
         ])
 
-    if len(summary_parts) == 4:
+    if not available_data_found:
         summary_parts.append("")
         summary_parts.append(
             "No migrated dashboard tables were available in SQLite."
@@ -351,6 +450,15 @@ def ask_smartboyai(message_history, api_key, database_context):
         "content": (
             "You are SmartBoyAI, a helpful cybersecurity and IT support "
             "assistant for a first-year computer science coursework project. "
+            "Only answer questions about Gatekeeper, its dashboard and project "
+            "database, cyber incidents, IT tickets, dataset metadata, "
+            "cybersecurity, or IT support. For every unrelated request, reply "
+            f"with exactly: {SCOPE_REFUSAL} Do not add an unrelated answer. "
+            "Use the previous conversation messages when the user asks a vague "
+            "follow-up such as 'why?', 'explain that', or 'what does this mean?'. "
+            "If a vague request has no useful earlier context, ask the user to "
+            "clarify which Gatekeeper, cybersecurity, database, or IT support "
+            "topic they need help with. "
             "Keep answers clear, safe, and beginner-friendly. Help users "
             "understand cyber incidents, IT tickets, and dataset questions. "
             "Use the hidden database context below when answering questions "
@@ -391,9 +499,6 @@ ui.page_header(
     "Database-aware cybersecurity and IT support",
     status=ai_status,
     status_accent=ai_status_accent,
-    logo_path="assets/logos/smartboyai_logo.png",
-    logo_text="AI",
-    logo_alt="SmartBoyAI logo",
 )
 session_column, safety_column = st.columns(2)
 
@@ -441,7 +546,11 @@ if user_prompt:
     with st.chat_message("user"):
         st.write(user_prompt)
 
-    if api_key == "":
+    earlier_messages = st.session_state["messages"][:-1]
+
+    if not is_prompt_in_scope(user_prompt, earlier_messages):
+        assistant_reply = SCOPE_REFUSAL
+    elif api_key == "":
         assistant_reply = (
             "SmartBoyAI cannot answer yet because the Groq API key is missing."
         )
@@ -456,7 +565,7 @@ if user_prompt:
                 )
             except Exception as error:
                 assistant_reply = "SmartBoyAI could not get a response."
-                st.caption(f"Technical detail: {error}")
+                st.caption(f"Technical detail: {type(error).__name__}")
 
     st.session_state["messages"].append(
         {
