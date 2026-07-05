@@ -276,6 +276,11 @@ four dashboard visualisations are displayed without removing any chart.
 - Streamlit protected pages check authenticated session state.
 - CLI administrator actions require a logged-in administrator role.
 - Secrets are loaded from ignored local configuration or environment variables.
+
+Native Streamlit text/password inputs do not reliably provide true
+per-keystroke updates for instant feedback. Gatekeeper therefore uses a small
+local frontend component only for the live strength display; final password
+validation and bcrypt hashing remain in Python.
 - SmartBoyAI context excludes user accounts, password hashes, and API keys.
 - Exported dashboard previews do not include account credentials.
 
@@ -362,3 +367,6 @@ and SendGrid email delivery require working internet access and valid keys.
 - SendGrid documentation for verified senders and email delivery.
 - SQLite documentation for parameterised queries and table creation.
 - Rich documentation for console panels, rules, and tables.
+- [Streamlit issue #4553: rerun on each new keystroke](https://github.com/streamlit/streamlit/issues/4553)
+- [Streamlit forum: forcing `st.text_input` to rerun for every letter](https://discuss.streamlit.io/t/modify-st-text-input/29823)
+- [`streamlit-keyup`: component-based keyup input](https://github.com/blackary/streamlit-keyup)
