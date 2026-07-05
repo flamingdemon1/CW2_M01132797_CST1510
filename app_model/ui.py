@@ -334,11 +334,27 @@ def apply_theme():
         }}
 
         div[data-baseweb="input"] input,
-        div[data-baseweb="textarea"] textarea,
-        input, textarea {{
+        div[data-baseweb="textarea"] textarea {{
             color: var(--gk-text) !important;
             caret-color: var(--gk-cyan) !important;
             background-color: var(--gk-input) !important;
+        }}
+
+        [data-testid="stMultiSelect"] input {{
+            background: transparent !important;
+        }}
+
+        /* Keep a little breathing room while leaving chip layout to Streamlit. */
+        [data-testid="stMultiSelect"] [data-baseweb="select"] > div {{
+            min-height: 3rem !important;
+            height: auto !important;
+            padding-top: 0.35rem !important;
+            padding-bottom: 0.35rem !important;
+        }}
+
+        [data-testid="stMultiSelect"] [data-baseweb="select"]
+        > div > div:first-child {{
+            justify-content: center !important;
         }}
 
         .stButton > button,
@@ -365,6 +381,12 @@ def apply_theme():
             border-color: #0891b2;
             background: #087f9b;
             color: white;
+        }}
+
+        .st-key-login_create_account button,
+        .st-key-login_forgot_password button {{
+            height: 2.75rem !important;
+            white-space: nowrap !important;
         }}
 
         [data-testid="stAlert"] {{

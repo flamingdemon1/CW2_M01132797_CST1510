@@ -160,7 +160,7 @@ def get_saved_results(conn, username=None):
     if username is None:
         cursor.execute(
             """
-            SELECT id, username, result_type, title, created_at
+            SELECT id, username, result_type, title, created_at, save_source
             FROM saved_results
             ORDER BY id DESC;
             """
@@ -168,7 +168,7 @@ def get_saved_results(conn, username=None):
     else:
         cursor.execute(
             """
-            SELECT id, username, result_type, title, created_at
+            SELECT id, username, result_type, title, created_at, save_source
             FROM saved_results
             WHERE username = ?
             ORDER BY id DESC;

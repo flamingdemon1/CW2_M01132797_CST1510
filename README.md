@@ -22,6 +22,8 @@ dataset logic are separated into small Python modules.
 - Recovery-email management and SendGrid password-reset codes.
 - Protected Streamlit Dashboard, Profile, and SmartBoyAI pages.
 - Cyber-incident metrics, filters, charts, heatmap, timeline, and paginated table.
+- User-selectable dashboard visualisations with all four charts enabled by default.
+- Streamlit dashboard summaries saved to the shared SQLite results table.
 - SmartBoyAI support for cybersecurity, IT tickets, and dataset questions.
 - SQLite storage for users, migrated datasets, and saved CLI results.
 - CSV-to-SQLite migration from the required `DATA/` coursework files.
@@ -257,6 +259,12 @@ id, username, result_type, title, content, created_at, save_source
 
 CLI menu option 12 displays saved records. Normal users can view their own
 records, while administrators can view all saved records.
+
+The protected Streamlit dashboard can also save its current filtered summary to
+the same `saved_results` table. The summary includes the active severity filter,
+incident total, category/status/severity counts, and a note explaining that
+table pagination does not change the saved totals. Users can select which of the
+four dashboard visualisations are displayed without removing any chart.
 
 ## Security and Privacy Notes
 

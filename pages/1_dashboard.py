@@ -1,12 +1,13 @@
 """Protected cyber incident dashboard for Gatekeeper."""
 
 import math
+import sqlite3
 
 import altair as alt
 import pandas as pd
 import streamlit as st
 
-from app_model import db, ui
+from app_model import db, export_service, ui
 from app_model.logic import cyber_incidents
 
 
@@ -19,6 +20,13 @@ REQUIRED_INCIDENT_COLUMNS = {
 PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 SEVERITY_ORDER = ["Critical", "High", "Medium", "Low"]
 CHART_HEIGHT = 270
+CHART_PADDING = {"left": 25, "right": 35, "top": 10, "bottom": 25}
+VISUALISATION_OPTIONS = [
+    "Category",
+    "Status",
+    "Severity Heatmap",
+    "Time Trend",
+]
 
 
 st.set_page_config(
@@ -50,6 +58,17 @@ if not st.session_state["logged_in"]:
         st.switch_page("home.py")
 
     st.stop()
+
+if not str(st.session_state.get("username", "")).strip():
+    st.error("Your session is missing a username. Please log in again.")
+    ui.logout()
+
+    if st.button("Return to login", icon=":material/login:"):
+        st.switch_page("home.py")
+
+    st.stop()
+
+active_username = str(st.session_state["username"]).strip()
 
 
 ui.content_profile_control()
@@ -85,13 +104,76 @@ def style_chart(chart):
             titleColor=colours["text"],
             gridColor=colours["grid"],
             domainColor=colours["grid"],
+            labelPadding=6,
+            titlePadding=12,
         )
         .configure_legend(
             labelColor=colours["text"],
             titleColor=colours["text"],
+            labelPadding=6,
+            titlePadding=8,
+            padding=10,
         )
         .configure_view(strokeOpacity=0)
     )
+
+
+def format_summary_counts(data, column_name):
+    """Format one dashboard value-count series for saved text content."""
+    counts = data[column_name].fillna("Unknown").value_counts()
+    return ", ".join(f"{name}: {count}" for name, count in counts.items())
+
+
+def create_dashboard_summary(data, severity_filter):
+    """Create the text stored for the current filtered dashboard view."""
+    return "\n".join(
+        [
+            f"Selected severity filter: {severity_filter}",
+            f"Total incidents shown: {len(data)}",
+            f"Category counts: {format_summary_counts(data, 'category')}",
+            f"Status counts: {format_summary_counts(data, 'status')}",
+            f"Severity counts: {format_summary_counts(data, 'severity')}",
+            "Pagination affects only the displayed records and does not change "
+            "this saved dashboard summary.",
+        ]
+    )
+
+
+def save_dashboard_summary(username, severity_filter, data):
+    """Save the active dashboard summary through the shared export service."""
+    connection = db.get_connection()
+
+    try:
+        return export_service.save_result_to_database(
+            connection,
+            username,
+            "Dashboard Summary",
+            f"Cyber Incident Dashboard - {severity_filter}",
+            create_dashboard_summary(data, severity_filter),
+            save_source="Streamlit Dashboard",
+        )
+    finally:
+        connection.close()
+
+
+def load_user_saved_results(username):
+    """Load saved-result summaries belonging to the logged-in user."""
+    connection = db.get_connection()
+
+    try:
+        return export_service.get_saved_results(connection, username)
+    finally:
+        connection.close()
+
+
+def load_user_saved_result(result_id, username):
+    """Load one full saved result while enforcing ownership."""
+    connection = db.get_connection()
+
+    try:
+        return export_service.get_saved_result(connection, result_id, username)
+    finally:
+        connection.close()
 
 
 ui.sidebar_user(st.session_state["username"])
@@ -152,7 +234,7 @@ if filtered_data.empty:
 
 ui.status_card(
     "Authenticated operator",
-    f"Workspace active for {st.session_state['username']} · {filter_note}",
+    f"Workspace active for {active_username} · {filter_note}",
     accent="green",
 )
 
@@ -198,10 +280,48 @@ with metric_four:
 
 
 ui.section_heading(
+    "Save dashboard summary",
+    "Store the current filtered summary in the shared SQLite saved-results table.",
+)
+st.caption("Saved summaries appear in the Saved Results section below the records table.")
+
+save_message = st.session_state.pop("dashboard_save_message", None)
+
+if save_message:
+    st.success(save_message)
+
+if st.button(
+    "Save dashboard summary to database",
+    icon=":material/save:",
+    type="primary",
+):
+    try:
+        saved_result_id = save_dashboard_summary(
+            active_username,
+            selected_severity,
+            filtered_data,
+        )
+        st.session_state["dashboard_save_message"] = (
+            f"Dashboard summary saved successfully with ID {saved_result_id}."
+        )
+        st.rerun()
+    except (sqlite3.Error, OSError, ValueError):
+        st.error("The dashboard summary could not be saved to SQLite.")
+    except Exception as error:
+        st.error("The dashboard summary could not be saved.")
+        st.caption(f"Technical detail: {type(error).__name__}")
+
+
+ui.section_heading(
     "Incident visualisations",
     "Charts use the same active severity filter as the table below.",
 )
-chart_column_one, chart_column_two = st.columns(2)
+selected_visualisations = st.multiselect(
+    "Choose visualisations to display",
+    VISUALISATION_OPTIONS,
+    default=VISUALISATION_OPTIONS,
+    key="dashboard_visualisations",
+)
 
 category_counts = (
     filtered_data["category"]
@@ -221,45 +341,6 @@ status_counts = (
     .sort_values("Incidents", ascending=False)
 )
 
-with chart_column_one:
-    with st.container(border=True):
-        st.subheader("📂 Incidents by category")
-        st.caption(
-            "Categories are sorted from most to least common. Hover for exact totals."
-        )
-        category_chart = (
-            alt.Chart(category_counts)
-            .mark_bar(color="#0891b2", cornerRadiusEnd=3)
-            .encode(
-                y=alt.Y("Category:N", sort="-x", title=None),
-                x=alt.X("Incidents:Q", title="Number of incidents"),
-                tooltip=["Category:N", "Incidents:Q"],
-            )
-            .properties(height=CHART_HEIGHT)
-        )
-        st.altair_chart(style_chart(category_chart), width="stretch")
-
-with chart_column_two:
-    with st.container(border=True):
-        st.subheader("✅ Incidents by status")
-        st.caption(
-            "Statuses are sorted to show where reports sit in the response workflow."
-        )
-        status_chart = (
-            alt.Chart(status_counts)
-            .mark_bar(color="#059669", cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
-            .encode(
-                x=alt.X("Status:N", sort="-y", title=None),
-                y=alt.Y("Incidents:Q", title="Number of incidents"),
-                tooltip=["Status:N", "Incidents:Q"],
-            )
-            .properties(height=CHART_HEIGHT)
-        )
-        st.altair_chart(style_chart(status_chart), width="stretch")
-
-
-detail_column_one, detail_column_two = st.columns(2)
-
 heatmap_data = (
     filtered_data.assign(
         severity=filtered_data["severity"].fillna("Unknown"),
@@ -270,61 +351,117 @@ heatmap_data = (
     .reset_index(name="Incidents")
 )
 
-with detail_column_one:
-    with st.container(border=True):
-        st.subheader("🔥 Severity and category heatmap")
-        st.caption(
-            "Darker cells identify category and severity combinations with more reports."
+category_chart = (
+    alt.Chart(category_counts)
+    .mark_bar(color="#0891b2", cornerRadiusEnd=3)
+    .encode(
+        y=alt.Y("Category:N", sort="-x", title=None),
+        x=alt.X("Incidents:Q", title="Number of incidents"),
+        tooltip=["Category:N", "Incidents:Q"],
+    )
+    .properties(height=CHART_HEIGHT, padding=CHART_PADDING)
+)
+
+status_chart = (
+    alt.Chart(status_counts)
+    .mark_bar(color="#059669", cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+    .encode(
+        x=alt.X("Status:N", sort="-y", title=None),
+        y=alt.Y("Incidents:Q", title="Number of incidents"),
+        tooltip=["Status:N", "Incidents:Q"],
+    )
+    .properties(height=CHART_HEIGHT, padding=CHART_PADDING)
+)
+
+heatmap = (
+    alt.Chart(heatmap_data)
+    .mark_rect(cornerRadius=2)
+    .encode(
+        x=alt.X("category:N", title="Category"),
+        y=alt.Y("severity:N", title="Severity", sort=SEVERITY_ORDER),
+        color=alt.Color(
+            "Incidents:Q",
+            scale=alt.Scale(scheme="tealblues"),
+            title="Incidents",
+        ),
+        tooltip=["severity:N", "category:N", "Incidents:Q"],
+    )
+    .properties(height=CHART_HEIGHT, padding=CHART_PADDING)
+)
+
+trend_data = filtered_data.dropna(subset=["timestamp"]).copy()
+trend_chart = None
+
+if not trend_data.empty:
+    trend_data["Date"] = trend_data["timestamp"].dt.date
+    trend_counts = trend_data.groupby("Date").size().reset_index(name="Incidents")
+    trend_chart = (
+        alt.Chart(trend_counts)
+        .mark_line(point=True, color="#2563eb", strokeWidth=2)
+        .encode(
+            x=alt.X("Date:T", title="Date"),
+            y=alt.Y("Incidents:Q", title="Number of incidents"),
+            tooltip=[
+                alt.Tooltip("Date:T", title="Date"),
+                alt.Tooltip("Incidents:Q", title="Incidents"),
+            ],
         )
-        heatmap = (
-            alt.Chart(heatmap_data)
-            .mark_rect(cornerRadius=2)
-            .encode(
-                x=alt.X("category:N", title="Category"),
-                y=alt.Y(
-                    "severity:N",
-                    title="Severity",
-                    sort=SEVERITY_ORDER,
-                ),
-                color=alt.Color(
-                    "Incidents:Q",
-                    scale=alt.Scale(scheme="tealblues"),
-                    title="Incidents",
-                ),
-                tooltip=["severity:N", "category:N", "Incidents:Q"],
-            )
-            .properties(height=CHART_HEIGHT)
-        )
-        st.altair_chart(style_chart(heatmap), width="stretch")
+        .properties(height=CHART_HEIGHT, padding=CHART_PADDING)
+    )
 
-with detail_column_two:
-    with st.container(border=True):
-        st.subheader("📈 Incidents over time")
-        st.caption("Daily report volume reveals peaks and changes in incident activity.")
+chart_definitions = [
+    {
+        "name": "Category",
+        "title": "📂 Incidents by category",
+        "caption": "Categories are sorted from most to least common. Hover for exact totals.",
+        "chart": category_chart,
+    },
+    {
+        "name": "Status",
+        "title": "✅ Incidents by status",
+        "caption": "Statuses are sorted to show where reports sit in the response workflow.",
+        "chart": status_chart,
+    },
+    {
+        "name": "Severity Heatmap",
+        "title": "🔥 Severity and category heatmap",
+        "caption": "Darker cells identify category and severity combinations with more reports.",
+        "chart": heatmap,
+    },
+    {
+        "name": "Time Trend",
+        "title": "📈 Incidents over time",
+        "caption": "Daily report volume reveals peaks and changes in incident activity.",
+        "chart": trend_chart,
+    },
+]
 
-        trend_data = filtered_data.dropna(subset=["timestamp"]).copy()
+visible_charts = [
+    chart
+    for chart in chart_definitions
+    if chart["name"] in selected_visualisations
+]
 
-        if trend_data.empty:
-            st.info("No valid timestamps are available for a time trend.")
-        else:
-            trend_data["Date"] = trend_data["timestamp"].dt.date
-            trend_counts = (
-                trend_data.groupby("Date").size().reset_index(name="Incidents")
-            )
-            trend_chart = (
-                alt.Chart(trend_counts)
-                .mark_line(point=True, color="#2563eb", strokeWidth=2)
-                .encode(
-                    x=alt.X("Date:T", title="Date"),
-                    y=alt.Y("Incidents:Q", title="Number of incidents"),
-                    tooltip=[
-                        alt.Tooltip("Date:T", title="Date"),
-                        alt.Tooltip("Incidents:Q", title="Incidents"),
-                    ],
-                )
-                .properties(height=CHART_HEIGHT)
-            )
-            st.altair_chart(style_chart(trend_chart), width="stretch")
+if not visible_charts:
+    st.info("No visualisations selected.")
+
+for row_start in range(0, len(visible_charts), 2):
+    chart_row = visible_charts[row_start : row_start + 2]
+    chart_columns = st.columns(len(chart_row))
+
+    for chart_column, chart_details in zip(chart_columns, chart_row):
+        with chart_column:
+            with st.container(border=True):
+                st.subheader(chart_details["title"])
+                st.caption(chart_details["caption"])
+
+                if chart_details["chart"] is None:
+                    st.info("No valid timestamps are available for a time trend.")
+                else:
+                    st.altair_chart(
+                        style_chart(chart_details["chart"]),
+                        width="stretch",
+                    )
 
 
 ui.section_heading(
@@ -381,6 +518,72 @@ with next_column:
 
 st.caption(f"Showing records {start_index + 1}–{end_index} of {total_records}")
 st.dataframe(ui.style_dataframe(page_data), width="stretch", hide_index=True)
+
+ui.section_heading(
+    "Saved Results",
+    "Recent SQLite results saved by your account.",
+)
+
+try:
+    saved_results = load_user_saved_results(active_username)
+
+    if not saved_results:
+        st.info(
+            "No saved results found yet. Click 'Save dashboard summary to database' "
+            "above to store the current dashboard summary."
+        )
+    else:
+        recent_saved_results = saved_results[:10]
+        st.caption("Showing the 10 most recent saved results for this account.")
+        saved_results_table = pd.DataFrame(
+            [
+                {
+                    "ID": result["id"],
+                    "Result type": result["result_type"],
+                    "Title": result["title"],
+                    "Created at": result["created_at"],
+                    "Save source": result["save_source"],
+                }
+                for result in recent_saved_results
+            ]
+        )
+        st.dataframe(
+            ui.style_dataframe(saved_results_table),
+            width="stretch",
+            hide_index=True,
+        )
+
+        result_ids = [result["id"] for result in recent_saved_results]
+        selected_result_id = st.selectbox(
+            "View saved result content",
+            [None] + result_ids,
+            format_func=lambda result_id: (
+                "Select a saved result"
+                if result_id is None
+                else f"Result ID {result_id}"
+            ),
+        )
+
+        if selected_result_id is not None:
+            selected_result = load_user_saved_result(
+                selected_result_id,
+                active_username,
+            )
+
+            if selected_result is None:
+                st.error("The saved result could not be found.")
+            else:
+                with st.expander(
+                    f"{selected_result['title']} (ID {selected_result_id})",
+                    expanded=True,
+                ):
+                    st.text(selected_result["content"])
+
+except (sqlite3.Error, OSError):
+    st.error("Saved results could not be loaded from SQLite.")
+except Exception as error:
+    st.error("Saved results could not be displayed.")
+    st.caption(f"Technical detail: {type(error).__name__}")
 
 ui.section_heading("Operational insight")
 ui.section_card(
