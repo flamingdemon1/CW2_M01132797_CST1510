@@ -83,6 +83,7 @@ st.set_page_config(
 
 ui.apply_theme()
 ui.sidebar_logo("assets/logos/smartboyai_logo.png")
+ui.sidebar_theme_control("smartboyai")
 
 
 if "logged_in" not in st.session_state:

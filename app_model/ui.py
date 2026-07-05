@@ -27,6 +27,7 @@ THEMES = {
     "dark": {
         "bg": "#05080f",
         "surface": "#0b1220",
+        "card": "#0b1220",
         "surface_raised": "#101a2a",
         "input": "#07101c",
         "sidebar": "#080f1b",
@@ -36,6 +37,12 @@ THEMES = {
         "muted": "#a8b4c6",
         "button": "#0c2433",
         "button_hover": "#103047",
+        "primary": "#087f9b",
+        "primary_hover": "#0e7490",
+        "primary_border": "#0891b2",
+        "success": "#059669",
+        "warning": "#d97706",
+        "danger": "#e11d48",
         "shadow": "rgba(0, 0, 0, 0.18)",
         "chart_text": "#e5edf7",
         "chart_grid": "#26364a",
@@ -43,6 +50,7 @@ THEMES = {
     "light": {
         "bg": "#f3f7fb",
         "surface": "#ffffff",
+        "card": "#ffffff",
         "surface_raised": "#eef5fa",
         "input": "#ffffff",
         "sidebar": "#eaf2f8",
@@ -52,6 +60,12 @@ THEMES = {
         "muted": "#526579",
         "button": "#e2f2f7",
         "button_hover": "#cdeaf2",
+        "primary": "#087f9b",
+        "primary_hover": "#0e7490",
+        "primary_border": "#036b86",
+        "success": "#047857",
+        "warning": "#b45309",
+        "danger": "#be123c",
         "shadow": "rgba(20, 52, 74, 0.10)",
         "chart_text": "#23384d",
         "chart_grid": "#d6e1e9",
@@ -90,6 +104,7 @@ def apply_theme():
             color-scheme: {get_theme()};
             --gk-bg: {palette['bg']};
             --gk-surface: {palette['surface']};
+            --gk-card: {palette['card']};
             --gk-surface-raised: {palette['surface_raised']};
             --gk-input: {palette['input']};
             --gk-sidebar: {palette['sidebar']};
@@ -99,8 +114,14 @@ def apply_theme():
             --gk-muted: {palette['muted']};
             --gk-button: {palette['button']};
             --gk-button-hover: {palette['button_hover']};
+            --gk-primary: {palette['primary']};
+            --gk-primary-hover: {palette['primary_hover']};
+            --gk-primary-border: {palette['primary_border']};
+            --gk-success: {palette['success']};
+            --gk-warning: {palette['warning']};
+            --gk-danger: {palette['danger']};
             --gk-shadow: {palette['shadow']};
-            --gk-cyan: #0891b2;
+            --gk-cyan: {palette['primary_border']};
         }}
 
         html, body,
@@ -136,6 +157,15 @@ def apply_theme():
             background: var(--gk-sidebar);
         }}
 
+        [data-testid="stSidebarNav"] a {{
+            color: var(--gk-text) !important;
+        }}
+
+        [data-testid="stSidebarNav"] a:hover,
+        [data-testid="stSidebarNav"] a[aria-current="page"] {{
+            background: var(--gk-surface-raised) !important;
+        }}
+
         /* Presentation-only spacing after Streamlit's official hideTopBar.
            This does not affect navigation or application logic. */
         .block-container {{
@@ -156,6 +186,17 @@ def apply_theme():
 
         .st-key-content_profile_control [data-testid="stVerticalBlock"] {{
             gap: 0;
+        }}
+
+        .st-key-content_profile_control [data-testid="stPopoverButton"],
+        .st-key-content_profile_control [data-testid="stPopoverButton"] button {{
+            border-color: var(--gk-border) !important;
+            background: var(--gk-button) !important;
+            color: var(--gk-text) !important;
+        }}
+
+        .st-key-content_profile_control [data-testid="stPopoverButton"] * {{
+            color: var(--gk-text) !important;
         }}
 
         h1, h2, h3, h4, h5, h6,
@@ -233,7 +274,7 @@ def apply_theme():
         .gk-status-card {{
             border: 1px solid var(--gk-border);
             border-radius: 6px;
-            background: var(--gk-surface);
+            background: var(--gk-card);
             box-shadow: 0 10px 24px var(--gk-shadow);
         }}
 
@@ -319,9 +360,25 @@ def apply_theme():
             color: var(--gk-text) !important;
         }}
 
+        [data-testid="stPopoverBody"],
+        [data-testid="stPopoverBody"] > div,
+        [data-testid="stPopoverBody"] [data-testid="stVerticalBlock"],
+        [data-baseweb="popover"] [role="menu"] {{
+            background: var(--gk-card) !important;
+            color: var(--gk-text) !important;
+        }}
+
         [data-baseweb="popover"] *,
         div[role="dialog"] * {{
             color: var(--gk-text);
+        }}
+
+        [data-testid="stExpander"],
+        [data-testid="stExpander"] details,
+        [data-testid="stExpander"] summary {{
+            border-color: var(--gk-border) !important;
+            background-color: var(--gk-card) !important;
+            color: var(--gk-text) !important;
         }}
 
         div[data-baseweb="input"],
@@ -357,6 +414,27 @@ def apply_theme():
             justify-content: center !important;
         }}
 
+        /* Colour-only multiselect rules preserve the centred chip layout. */
+        [data-testid="stMultiSelect"] [data-baseweb="tag"] {{
+            border: 1px solid var(--gk-primary-border) !important;
+            background: var(--gk-button) !important;
+            color: var(--gk-text) !important;
+        }}
+
+        ul[role="listbox"] {{
+            border: 1px solid var(--gk-border) !important;
+            background: var(--gk-surface) !important;
+        }}
+
+        li[role="option"] {{
+            background: var(--gk-surface) !important;
+            color: var(--gk-text) !important;
+        }}
+
+        li[role="option"]:hover {{
+            background: var(--gk-surface-raised) !important;
+        }}
+
         .stButton > button,
         .stFormSubmitButton > button,
         [data-testid="stPopover"] > button {{
@@ -378,9 +456,15 @@ def apply_theme():
 
         .stButton > button[kind="primary"],
         .stFormSubmitButton > button[kind="primary"] {{
-            border-color: #0891b2;
-            background: #087f9b;
-            color: white;
+            border-color: var(--gk-primary-border);
+            background: var(--gk-primary);
+            color: #ffffff;
+        }}
+
+        .stButton > button[kind="primary"]:hover,
+        .stFormSubmitButton > button[kind="primary"]:hover {{
+            background: var(--gk-primary-hover);
+            color: #ffffff;
         }}
 
         .st-key-login_create_account button,
@@ -393,6 +477,26 @@ def apply_theme():
             border: 1px solid var(--gk-border);
             background: var(--gk-surface);
             color: var(--gk-text);
+        }}
+
+        [data-testid="stDataFrame"],
+        [data-testid="stDataFrame"] > div,
+        [data-testid="stDataFrame"] [class*="gdg-"],
+        [data-testid="stTable"] {{
+            --gdg-bg-cell: {palette['surface']};
+            --gdg-bg-header: {palette['surface_raised']};
+            --gdg-bg-header-has-focus: {palette['button_hover']};
+            --gdg-bg-bubble: {palette['button']};
+            --gdg-text-dark: {palette['text']};
+            --gdg-text-medium: {palette['muted']};
+            --gdg-text-light: {palette['muted']};
+            --gdg-text-header: {palette['text']};
+            --gdg-text-group-header: {palette['text']};
+            --gdg-border-color: {palette['border']};
+            --gdg-horizontal-border-color: {palette['border_soft']};
+            --gdg-accent-color: {palette['primary']};
+            --gdg-accent-light: {palette['button']};
+            --gdg-link-color: {palette['primary_border']};
         }}
 
         [data-testid="stDataFrame"], [data-testid="stTable"] {{
@@ -422,9 +526,36 @@ def apply_theme():
             line-height: 1.7;
         }}
 
-        [data-testid="stChatInput"] {{
+        [data-testid="stBottom"],
+        [data-testid="stBottom"] > div,
+        [data-testid="stBottomBlockContainer"],
+        [data-testid="stBottomBlockContainer"] > div {{
+            background: var(--gk-bg) !important;
+            background-image: none !important;
+        }}
+
+        /* Flatten Streamlit's nested chat-input surfaces into one clean bar. */
+        [data-testid="stChatInput"],
+        [data-testid="stChatInput"] > div,
+        [data-testid="stChatInput"] div[data-baseweb="textarea"],
+        [data-testid="stChatInput"] div[data-baseweb="base-input"],
+        [data-testid="stChatInput"] textarea {{
             border-color: var(--gk-border) !important;
             background: var(--gk-surface) !important;
+            color: var(--gk-text) !important;
+            box-shadow: none !important;
+        }}
+
+        [data-testid="stChatInput"] > div,
+        [data-testid="stChatInput"] div[data-baseweb="textarea"],
+        [data-testid="stChatInput"] div[data-baseweb="base-input"] {{
+            border: 0 !important;
+        }}
+
+        [data-testid="stChatInput"] textarea::placeholder {{
+            color: var(--gk-muted) !important;
+            -webkit-text-fill-color: var(--gk-muted) !important;
+            opacity: 1 !important;
         }}
 
         .gk-route-space {{ height: 1.5rem; }}
@@ -479,6 +610,23 @@ def sidebar_logo(logo_path=None):
         st.sidebar.image(str(selected_logo), width=180)
 
 
+def sidebar_theme_control(page_name):
+    """Show one persistent light/dark switch in the standard sidebar."""
+    current_theme = get_theme()
+    next_theme = "light" if current_theme == "dark" else "dark"
+    button_label = "Light mode" if next_theme == "light" else "Dark mode"
+    button_icon = ":material/light_mode:" if next_theme == "light" else ":material/dark_mode:"
+
+    if st.sidebar.button(
+        button_label,
+        icon=button_icon,
+        key=f"theme_switch_{page_name}",
+        width="stretch",
+    ):
+        st.session_state["theme"] = next_theme
+        st.rerun()
+
+
 def route_spacing():
     """Add consistent presentation spacing below protected-route messages."""
     st.markdown('<div class="gk-route-space"></div>', unsafe_allow_html=True)
@@ -528,13 +676,39 @@ def content_profile_control():
 def style_dataframe(data):
     """Return a pandas Styler that follows the selected interface theme."""
     palette = THEMES[get_theme()]
-    return data.style.set_properties(
+    styler = data.style.set_properties(
         **{
             "background-color": palette["surface"],
             "color": palette["text"],
             "border-color": palette["border_soft"],
         }
     )
+    return styler.set_table_styles(
+        [
+            {
+                "selector": "th",
+                "props": [
+                    ("background-color", palette["surface_raised"]),
+                    ("color", palette["text"]),
+                    ("border-color", palette["border"]),
+                ],
+            }
+        ]
+    ).hide(axis="index")
+
+
+def themed_dataframe(data, height=420):
+    """Display readable tabular data while preserving dark-mode interaction."""
+    styled_data = style_dataframe(data)
+
+    if get_theme() == "light":
+        # Streamlit draws dataframe headers on a native-theme canvas. A normal
+        # table keeps those headings readable without JavaScript or CSS filters.
+        with st.container(height=height, border=False):
+            st.table(styled_data)
+        return
+
+    st.dataframe(styled_data, width="stretch", hide_index=True)
 
 
 def _accent_colour(accent):

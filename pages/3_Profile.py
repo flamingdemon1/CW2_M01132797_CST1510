@@ -24,6 +24,7 @@ for key, default_value in {"logged_in": False, "username": ""}.items():
 
 ui.apply_theme()
 ui.sidebar_logo()
+ui.sidebar_theme_control("profile")
 
 
 if not st.session_state["logged_in"]:

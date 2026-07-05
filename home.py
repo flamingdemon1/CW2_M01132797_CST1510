@@ -1,7 +1,6 @@
 """Gatekeeper Streamlit entry page and account access flow."""
 
 import sqlite3
-
 import streamlit as st
 
 from app_model import db, schema, ui, users
@@ -41,6 +40,7 @@ for key, default_value in {
 
 ui.apply_theme()
 ui.sidebar_logo()
+ui.sidebar_theme_control("home")
 
 
 def show_auth_view(view_name):
@@ -257,7 +257,6 @@ with access_column:
             else:
                 st.error(login_message)
 
-        st.caption("New to Gatekeeper or having trouble signing in?")
         create_column, forgot_column = st.columns(2, gap="small")
 
         with create_column:
@@ -265,6 +264,7 @@ with access_column:
                 "Create account",
                 icon=":material/person_add:",
                 width="stretch",
+                key="login_create_account",
             ):
                 show_auth_view("register")
 
@@ -273,6 +273,7 @@ with access_column:
                 "Forgot password?",
                 icon=":material/lock_reset:",
                 width="stretch",
+                key="login_forgot_password",
             ):
                 show_auth_view("recovery")
 

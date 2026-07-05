@@ -42,6 +42,7 @@ for key, default_value in {"logged_in": False, "username": ""}.items():
 
 ui.apply_theme()
 ui.sidebar_logo("assets/logos/dashboard_logo.png")
+ui.sidebar_theme_control("dashboard")
 
 
 if not st.session_state["logged_in"]:
@@ -517,7 +518,7 @@ with next_column:
         st.rerun()
 
 st.caption(f"Showing records {start_index + 1}–{end_index} of {total_records}")
-st.dataframe(ui.style_dataframe(page_data), width="stretch", hide_index=True)
+ui.themed_dataframe(page_data)
 
 ui.section_heading(
     "Saved Results",
@@ -547,11 +548,7 @@ try:
                 for result in recent_saved_results
             ]
         )
-        st.dataframe(
-            ui.style_dataframe(saved_results_table),
-            width="stretch",
-            hide_index=True,
-        )
+        ui.themed_dataframe(saved_results_table, height=360)
 
         result_ids = [result["id"] for result in recent_saved_results]
         selected_result_id = st.selectbox(
