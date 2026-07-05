@@ -10,6 +10,8 @@ import streamlit as st
 SENDGRID_PLACEHOLDERS = {
     "put_your_sendgrid_api_key_here",
     "put_your_verified_sender_email_here",
+    "your_sendgrid_api_key_here",
+    "your_verified_sender_email_here",
 }
 
 

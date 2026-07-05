@@ -6,6 +6,11 @@ from app_model import db, ui
 from app_model.logic import cyber_incidents, it_tickets, metadatas
 
 
+GROQ_KEY_PLACEHOLDERS = {
+    "put_your_groq_api_key_here",
+    "your_groq_api_key_here",
+}
+
 SCOPE_REFUSAL = (
     "I can only help with the Gatekeeper cybersecurity dashboard, incidents, "
     "IT tickets, dataset metadata and related IT/cybersecurity support. Please "
@@ -123,9 +128,11 @@ if st.sidebar.button(
 def get_groq_api_key():
     """Return the Groq API key from Streamlit secrets or an environment variable."""
     try:
-        return st.secrets["GROQ_API_KEY"]
+        api_key = str(st.secrets["GROQ_API_KEY"]).strip()
     except Exception:
-        return os.getenv("GROQ_API_KEY", "")
+        api_key = os.getenv("GROQ_API_KEY", "").strip()
+
+    return "" if api_key in GROQ_KEY_PLACEHOLDERS else api_key
 
 
 def is_prompt_in_scope(prompt, earlier_messages):

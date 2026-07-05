@@ -1,36 +1,354 @@
-### SmartBoyAI Database Integration
+# Gatekeeper System
 
-SmartBoyAI was improved so that it can answer questions using the project’s SQLite database instead of acting as a general chatbot only.
+## Project Overview
 
-The AI does not directly access the database by itself. Instead, the Streamlit application acts as a bridge between the database and the AI. When the user asks a question, the app loads relevant dashboard tables from SQLite, creates safe summaries such as incident counts, severity counts, ticket priority counts, status counts, and dataset metadata, then passes that summary as hidden context to the AI model.
+Gatekeeper is a secure multi-domain intelligence platform created for CST1510
+Coursework Two. It contains two interfaces that share the same SQLite database:
 
-This follows the same general idea as retrieval-augmented generation, where relevant external information is retrieved and provided to an AI model as context. However, this project does not directly use the LangChain library. The retrieval/context process was implemented manually using Python, pandas, SQLite, Streamlit, and Groq.
+- A Streamlit web application for account access, dashboard visualisation,
+  profile management, password recovery, and SmartBoyAI.
+- A Rich command-line application for account administration, CSV migration,
+  data previews, and result exports.
 
-To protect sensitive information, SmartBoyAI does not send user account data, password hashes, API keys, or full raw database tables to the AI. It only sends safe dashboard-style summaries and limited relevant dashboard rows when they are useful for answering the user’s question.
+The project is written to remain understandable for a first-year Computer
+Science demonstration. Security, data access, interface presentation, and
+dataset logic are separated into small Python modules.
 
-### CLI Result Saving
+## Main Features
 
-After previewing migrated data in the Rich CLI, a logged-in user can choose to
-save the five-row result as a UTF-8 text file, a CSV file, or a record in the
-project SQLite database. File exports are created in `DATA/exports/`. SQLite
-exports are stored in the `saved_results` table and can be viewed later using
-CLI menu option 12. Normal users can view their own saved records, while admins
-can view all saved records.
+- Registration and login using bcrypt password hashing.
+- Password-strength validation and username validation.
+- Normal-user and administrator roles in the CLI.
+- Recovery-email management and SendGrid password-reset codes.
+- Protected Streamlit Dashboard, Profile, and SmartBoyAI pages.
+- Cyber-incident metrics, filters, charts, heatmap, timeline, and paginated table.
+- SmartBoyAI support for cybersecurity, IT tickets, and dataset questions.
+- SQLite storage for users, migrated datasets, and saved CLI results.
+- CSV-to-SQLite migration from the required `DATA/` coursework files.
+- Rich CLI panels, tables, and coloured status messages.
+- Text, CSV, and SQLite result saving from CLI data previews.
 
-The `saved_results` table stores the username, result type, title, text content,
-creation time, and save source. Passwords, password hashes, and API keys are not
-included in exported results.
+## Project Structure
 
-Any additional external CSV datasets added in future coursework stages should
-come from genuine sources, and their source links should be recorded clearly.
+```text
+home.py                         Streamlit entry, login, registration, recovery
+main.py                         Rich command-line application
+pages/1_dashboard.py            Protected cyber-incident dashboard
+pages/2_SmartBoyAI.py           Protected Groq assistant
+pages/3_Profile.py              Protected account profile
+app_model/db.py                 SQLite connection and data paths
+app_model/schema.py             Database table creation
+app_model/users.py              User database operations
+app_model/email_service.py      SendGrid configuration and email delivery
+app_model/recovery.py           Reset-code generation and password recovery
+app_model/export_service.py     Text, CSV, and SQLite result saving
+app_model/logic/                Dataset migration and query modules
+DATA/                           Required CSV files and local SQLite database
+assets/logos/                   Gatekeeper, Dashboard, and SmartBoyAI logos
+.streamlit/config.toml          Streamlit interface configuration
+```
 
-### SmartBoyAI Data Privacy Note
+Forgot Password is intentionally part of `home.py`, not a visible page inside
+`pages/`.
 
-SmartBoyAI uses database summaries to answer project-related questions, but it does not send user login information to the AI. Passwords are stored as hashes, and account data is kept separate from the AI context. This helps the assistant provide useful dashboard insights while reducing the risk of exposing sensitive information.
+## Installation
 
-### References
+Python 3.12 or newer is recommended. From the project directory, install the
+required packages:
 
-- Streamlit documentation was used for the chat interface and session state features.
-- Streamlit secrets management documentation was used for storing the Groq API key outside the source code.
-- Groq documentation was used for connecting the app to the AI model.
-- LangChain retrieval-augmented generation documentation was used as a conceptual reference for retrieving project data and passing it to an AI model as context. The project does not directly use the LangChain library.
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Using a virtual environment is recommended:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+Important direct dependencies include:
+
+- `streamlit` for the web interface.
+- `pandas` for CSV and tabular data.
+- `altair` for dashboard visualisations.
+- `bcrypt` for password hashing and verification.
+- `groq` for SmartBoyAI responses.
+- `sendgrid` for password-recovery email.
+- `rich` for CLI panels, tables, and colours.
+
+## Secrets and API Keys
+
+Create the local secrets file from the provided example:
+
+```powershell
+Copy-Item .streamlit\secrets.toml.example .streamlit\secrets.toml
+```
+
+On macOS or Linux:
+
+```bash
+cp .streamlit/secrets.toml.example .streamlit/secrets.toml
+```
+
+Then replace only the placeholder values inside `.streamlit/secrets.toml`.
+
+```toml
+GROQ_API_KEY = "your_groq_api_key_here"
+SENDGRID_API_KEY = "your_sendgrid_api_key_here"
+SENDGRID_FROM_EMAIL = "your_verified_sender_email_here"
+ALLOW_LOCAL_RESET_FALLBACK = false
+```
+
+- `GROQ_API_KEY` enables SmartBoyAI.
+- `SENDGRID_API_KEY` and `SENDGRID_FROM_EMAIL` enable recovery email delivery.
+- The SendGrid sender address must be verified in the SendGrid account.
+- `ALLOW_LOCAL_RESET_FALLBACK` is disabled by default. Enable it only for
+  intentional local testing when email delivery is unavailable.
+
+Real keys must be stored only in `.streamlit/secrets.toml` or environment
+variables. `.streamlit/secrets.toml` is ignored by Git and must never be
+committed. The application displays friendly configuration messages instead of
+crashing when Groq or SendGrid keys are missing.
+
+## Running the Streamlit App
+
+Run this command from the project directory:
+
+```powershell
+python -m streamlit run home.py
+```
+
+Using `python -m streamlit` is recommended on Windows because it can work when
+the standalone `streamlit.exe` command is blocked or not available on `PATH`.
+Open the local address printed in the terminal, normally
+`http://localhost:8501`.
+
+The standard workflow is:
+
+1. Register with a username, recovery email, and strong password.
+2. Log in to open the protected dashboard.
+3. Use the sidebar to open Dashboard, SmartBoyAI, and Profile.
+4. Use Profile to update the recovery email or password.
+
+## Running the CLI
+
+Run the Rich command-line version with:
+
+```powershell
+python main.py
+```
+
+The CLI keeps password entry hidden with `getpass`. Administrator-only actions
+include user listing, user deletion, CSV migration, and administrator account
+management. Logged-in normal users can preview migrated data and manage their
+own account credentials.
+
+If Rich is missing, the CLI prints:
+
+```text
+Please install Rich using: pip install rich
+```
+
+## Database Usage
+
+Gatekeeper uses SQLite through `app_model/db.py`. The local database path is:
+
+```text
+DATA/project_data.db
+```
+
+Tables are created safely with `CREATE TABLE IF NOT EXISTS`. Important tables
+include:
+
+- `users`: usernames, bcrypt password hashes, recovery emails, and roles.
+- `cyber_incidents`: migrated cyber-incident records.
+- `it_tickets`: migrated IT-support ticket records.
+- `datasets_metadata`: migrated dataset information.
+- `saved_results`: CLI results saved for later viewing.
+
+The database file is local and ignored by Git. On a fresh setup, the user table
+is created automatically. Dataset tables are created when an administrator uses
+CLI menu option 6 to migrate the CSV files.
+
+## CSV Usage
+
+The required coursework datasets are stored in `DATA/`:
+
+```text
+DATA/cyber_incidents.csv
+DATA/datasets_metadata.csv
+DATA/it_tickets.csv
+```
+
+CLI menu option 6 migrates these files into SQLite. Migration is administrator
+only because it writes to and replaces dataset tables. Data preview is
+read-only and is available to logged-in users through menu option 7.
+
+The Streamlit dashboard reads cyber-incident data from SQLite, not directly
+from the CSV file. If the dashboard reports a missing table, run the CLI
+migration first.
+
+## SmartBoyAI
+
+SmartBoyAI does not directly connect to or query SQLite by itself. The Python
+and Streamlit application reads project data and creates safe context such as:
+
+- Total cyber incidents.
+- Severity, category, and status counts.
+- IT-ticket priority and status counts.
+- Resolution-time information when available.
+- Dataset metadata summaries.
+- Limited matching dashboard rows when needed for a specific question.
+
+This context is passed privately to Groq with the conversation history. The
+approach is similar to retrieval-augmented generation, but it is implemented
+manually and does not use LangChain.
+
+SmartBoyAI does not receive passwords, password hashes, API keys, or full raw
+user-account tables. It refuses clearly unrelated requests such as recipes,
+jokes, food, and football, while allowing questions and follow-ups about the
+dashboard, cybersecurity, IT tickets, datasets, and the project database.
+
+## SendGrid Password Recovery
+
+Users provide a recovery email during registration and can update it from the
+Profile page. The Forgot Password control is available from the login view.
+
+1. The user enters a username or unique recovery email.
+2. Gatekeeper creates a six-digit reset code.
+3. SendGrid sends the code to the stored recovery email.
+4. The code expires after ten minutes.
+5. The new password must pass the shared strength rules.
+6. The password is stored as a new bcrypt hash, never as plain text.
+
+Local on-screen reset codes are disabled unless
+`ALLOW_LOCAL_RESET_FALLBACK = true` is explicitly configured. If email delivery
+fails while fallback is disabled, Gatekeeper shows a safe error message.
+
+## Rich CLI Presentation
+
+Rich improves terminal readability only. It does not change authentication,
+roles, database operations, or password security. The CLI uses Rich for:
+
+- A welcome panel and structured main menu.
+- Coloured success, warning, information, and error messages.
+- Registered-user tables.
+- Dataset-preview tables.
+- Saved-result tables and content panels.
+
+## Text, CSV, and Database Exports
+
+After displaying a five-row migrated-data preview, the CLI offers:
+
+1. Save to a UTF-8 text file.
+2. Save to a CSV file.
+3. Save to the SQLite database.
+4. Do not save.
+
+Text and CSV files are written to `DATA/exports/`. CSV exports preserve the
+displayed rows and add save metadata. Database exports are inserted into
+`saved_results`, which stores:
+
+```text
+id, username, result_type, title, content, created_at, save_source
+```
+
+CLI menu option 12 displays saved records. Normal users can view their own
+records, while administrators can view all saved records.
+
+## Security and Privacy Notes
+
+- Passwords are hashed with bcrypt before database storage.
+- Password hashes are not displayed in user listings.
+- Login errors do not reveal whether a username or password was incorrect.
+- Streamlit protected pages check authenticated session state.
+- CLI administrator actions require a logged-in administrator role.
+- Secrets are loaded from ignored local configuration or environment variables.
+- SmartBoyAI context excludes user accounts, password hashes, and API keys.
+- Exported dashboard previews do not include account credentials.
+
+`st.session_state` protects navigation during an active Streamlit browser
+session, but it is not a replacement for a production identity provider. This
+project is designed for first-year coursework and local demonstration.
+
+## External Dataset Rules
+
+Additional CSV datasets may be used only when all of the following are true:
+
+- The dataset is relevant to the project.
+- It is a real dataset, not AI-generated or invented data.
+- A clear source link is provided.
+- Its licence or usage conditions allow coursework use.
+- It does not replace a required coursework CSV when the brief specifies a
+  particular file.
+
+Keep the required coursework CSV filenames and paths visible in their dataset
+logic modules.
+
+## Troubleshooting
+
+### Missing packages
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Make sure the same Python interpreter is used for installation and execution.
+
+### Streamlit command is blocked or not found on Windows
+
+Use the module command instead of the executable:
+
+```powershell
+python -m streamlit run home.py
+```
+
+### `.streamlit/secrets.toml` is missing
+
+Copy `.streamlit/secrets.toml.example`, rename the copy to `secrets.toml`, then
+replace the placeholders with local keys. Do not edit the example with real
+secrets.
+
+### SmartBoyAI reports a missing Groq key
+
+Add a valid `GROQ_API_KEY` to `.streamlit/secrets.toml` and restart Streamlit.
+Without internet or Groq API access, SmartBoyAI cannot generate a response.
+
+### SendGrid does not send a recovery email
+
+Check `SENDGRID_API_KEY`, verify `SENDGRID_FROM_EMAIL` in SendGrid, confirm the
+account has a recovery email, and check internet access. Request a new code if
+the previous code has expired.
+
+### Database or table is missing
+
+Run `python main.py`, log in as an administrator, and select menu option 6.
+Confirm the three required CSV files exist inside `DATA/`.
+
+### API or internet access is unavailable
+
+The dashboard, profile, CLI, and local database remain usable. Groq responses
+and SendGrid email delivery require working internet access and valid keys.
+
+## Fresh Clone Setup Checklist
+
+1. Clone or extract the project.
+2. Open a terminal in the project directory.
+3. Create and activate a virtual environment.
+4. Run `python -m pip install -r requirements.txt`.
+5. Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`.
+6. Add local API keys without committing the real secrets file.
+7. Run `python main.py`; use option 10 to create the first administrator if needed.
+8. Use CLI option 6 to migrate the required CSV files.
+9. Run `python -m streamlit run home.py`.
+10. Register or log in and test Dashboard, SmartBoyAI, Profile, and Recovery.
+
+## Technical References
+
+- Streamlit documentation for multipage apps, session state, secrets, and chat.
+- Groq documentation for chat-completion requests.
+- SendGrid documentation for verified senders and email delivery.
+- SQLite documentation for parameterised queries and table creation.
+- Rich documentation for console panels, rules, and tables.
