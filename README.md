@@ -265,6 +265,8 @@ the same `saved_results` table. The summary includes the active severity filter,
 incident total, category/status/severity counts, and a note explaining that
 table pagination does not change the saved totals. Users can select which of the
 four dashboard visualisations are displayed without removing any chart.
+The visualisations follow standard data-visualisation principles: clear titles,
+labelled axes, appropriate chart types, consistent colours, and reduced clutter.
 
 ## Security and Privacy Notes
 

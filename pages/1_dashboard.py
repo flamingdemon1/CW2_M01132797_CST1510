@@ -21,6 +21,13 @@ PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 SEVERITY_ORDER = ["Critical", "High", "Medium", "Low"]
 CHART_HEIGHT = 270
 CHART_PADDING = {"left": 25, "right": 35, "top": 10, "bottom": 25}
+STATUS_COLOURS = {
+    "Open": "#e11d48",
+    "In Progress": "#d97706",
+    "Resolved": "#059669",
+    "Closed": "#2563eb",
+    "Unknown": "#64748b",
+}
 VISUALISATION_OPTIONS = [
     "Category",
     "Status",
@@ -341,53 +348,149 @@ status_counts = (
     .reset_index(name="Incidents")
     .sort_values("Incidents", ascending=False)
 )
+status_counts["Colour"] = (
+    status_counts["Status"].map(STATUS_COLOURS).fillna("#64748b")
+)
 
-heatmap_data = (
+heatmap_counts = (
     filtered_data.assign(
         severity=filtered_data["severity"].fillna("Unknown"),
         category=filtered_data["category"].fillna("Unknown"),
     )
     .groupby(["severity", "category"])
     .size()
-    .reset_index(name="Incidents")
 )
+heatmap_categories = category_counts["Category"].tolist()
+heatmap_severities = [
+    severity
+    for severity in SEVERITY_ORDER
+    if severity in heatmap_counts.index.get_level_values("severity")
+]
+heatmap_severities.extend(
+    sorted(
+        severity
+        for severity in heatmap_counts.index.get_level_values("severity").unique()
+        if severity not in heatmap_severities
+    )
+)
+heatmap_index = pd.MultiIndex.from_product(
+    [heatmap_severities, heatmap_categories],
+    names=["severity", "category"],
+)
+heatmap_data = (
+    heatmap_counts.reindex(heatmap_index, fill_value=0)
+    .rename("Incidents")
+    .reset_index()
+)
+chart_text_colour = ui.get_chart_colours()["text"]
 
-category_chart = (
+category_bars = (
     alt.Chart(category_counts)
     .mark_bar(color="#0891b2", cornerRadiusEnd=3)
     .encode(
-        y=alt.Y("Category:N", sort="-x", title=None),
-        x=alt.X("Incidents:Q", title="Number of incidents"),
-        tooltip=["Category:N", "Incidents:Q"],
+        y=alt.Y(
+            "Category:N",
+            sort="-x",
+            title="Incident category",
+            axis=alt.Axis(labelLimit=150),
+        ),
+        x=alt.X(
+            "Incidents:Q",
+            title="Incident count",
+            scale=alt.Scale(zero=True),
+            axis=alt.Axis(tickMinStep=1),
+        ),
+        tooltip=[
+            alt.Tooltip("Category:N", title="Category"),
+            alt.Tooltip("Incidents:Q", title="Incidents"),
+        ],
     )
-    .properties(height=CHART_HEIGHT, padding=CHART_PADDING)
+)
+category_labels = category_bars.mark_text(
+    align="left",
+    baseline="middle",
+    dx=5,
+    color=chart_text_colour,
+).encode(text=alt.Text("Incidents:Q"))
+category_chart = (category_bars + category_labels).properties(
+    height=CHART_HEIGHT,
+    padding=CHART_PADDING,
 )
 
-status_chart = (
+status_bars = (
     alt.Chart(status_counts)
-    .mark_bar(color="#059669", cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+    .mark_bar(cornerRadiusEnd=3)
     .encode(
-        x=alt.X("Status:N", sort="-y", title=None),
-        y=alt.Y("Incidents:Q", title="Number of incidents"),
-        tooltip=["Status:N", "Incidents:Q"],
+        y=alt.Y(
+            "Status:N",
+            sort="-x",
+            title="Workflow status",
+            axis=alt.Axis(labelLimit=150),
+        ),
+        x=alt.X(
+            "Incidents:Q",
+            title="Incident count",
+            scale=alt.Scale(zero=True),
+            axis=alt.Axis(tickMinStep=1),
+        ),
+        color=alt.Color("Colour:N", scale=None, legend=None),
+        tooltip=[
+            alt.Tooltip("Status:N", title="Status"),
+            alt.Tooltip("Incidents:Q", title="Incidents"),
+        ],
     )
-    .properties(height=CHART_HEIGHT, padding=CHART_PADDING)
+)
+status_labels = status_bars.mark_text(
+    align="left",
+    baseline="middle",
+    dx=5,
+    color=chart_text_colour,
+).encode(text=alt.Text("Incidents:Q"))
+status_chart = (status_bars + status_labels).properties(
+    height=CHART_HEIGHT,
+    padding=CHART_PADDING,
 )
 
-heatmap = (
+heatmap_rectangles = (
     alt.Chart(heatmap_data)
     .mark_rect(cornerRadius=2)
     .encode(
-        x=alt.X("category:N", title="Category"),
-        y=alt.Y("severity:N", title="Severity", sort=SEVERITY_ORDER),
+        x=alt.X(
+            "category:N",
+            title="Incident category",
+            sort=heatmap_categories,
+            axis=alt.Axis(labelAngle=0, labelLimit=90),
+        ),
+        y=alt.Y(
+            "severity:N",
+            title="Severity level",
+            sort=heatmap_severities,
+        ),
         color=alt.Color(
             "Incidents:Q",
             scale=alt.Scale(scheme="tealblues"),
-            title="Incidents",
+            title="Incident count",
+            legend=alt.Legend(orient="bottom", direction="horizontal"),
         ),
-        tooltip=["severity:N", "category:N", "Incidents:Q"],
+        tooltip=[
+            alt.Tooltip("severity:N", title="Severity"),
+            alt.Tooltip("category:N", title="Category"),
+            alt.Tooltip("Incidents:Q", title="Incidents"),
+        ],
     )
-    .properties(height=CHART_HEIGHT, padding=CHART_PADDING)
+)
+heatmap_midpoint = max(1, heatmap_data["Incidents"].max() * 0.55)
+heatmap_labels = heatmap_rectangles.mark_text(fontWeight="bold").encode(
+    text=alt.Text("Incidents:Q"),
+    color=alt.condition(
+        alt.datum.Incidents >= heatmap_midpoint,
+        alt.value("#ffffff"),
+        alt.value(chart_text_colour),
+    ),
+)
+heatmap = (heatmap_rectangles + heatmap_labels).properties(
+    height=CHART_HEIGHT,
+    padding=CHART_PADDING,
 )
 
 trend_data = filtered_data.dropna(subset=["timestamp"]).copy()
@@ -400,8 +503,17 @@ if not trend_data.empty:
         alt.Chart(trend_counts)
         .mark_line(point=True, color="#2563eb", strokeWidth=2)
         .encode(
-            x=alt.X("Date:T", title="Date"),
-            y=alt.Y("Incidents:Q", title="Number of incidents"),
+            x=alt.X(
+                "Date:T",
+                title="Incident date",
+                axis=alt.Axis(format="%d %b", tickCount=6, labelAngle=0),
+            ),
+            y=alt.Y(
+                "Incidents:Q",
+                title="Daily incident count",
+                scale=alt.Scale(zero=True),
+                axis=alt.Axis(tickMinStep=1),
+            ),
             tooltip=[
                 alt.Tooltip("Date:T", title="Date"),
                 alt.Tooltip("Incidents:Q", title="Incidents"),
@@ -414,25 +526,25 @@ chart_definitions = [
     {
         "name": "Category",
         "title": "📂 Incidents by category",
-        "caption": "Categories are sorted from most to least common. Hover for exact totals.",
+        "caption": "Compares classifications from most to least common; labels show exact totals.",
         "chart": category_chart,
     },
     {
         "name": "Status",
         "title": "✅ Incidents by status",
-        "caption": "Statuses are sorted to show where reports sit in the response workflow.",
+        "caption": "Shows response workload by state; red/amber need attention and green indicates resolution.",
         "chart": status_chart,
     },
     {
         "name": "Severity Heatmap",
         "title": "🔥 Severity and category heatmap",
-        "caption": "Darker cells identify category and severity combinations with more reports.",
+        "caption": "Darker cells and larger counts identify concentrated category/severity combinations.",
         "chart": heatmap,
     },
     {
         "name": "Time Trend",
         "title": "📈 Incidents over time",
-        "caption": "Daily report volume reveals peaks and changes in incident activity.",
+        "caption": "Tracks daily volume; peaks identify dates with unusually high incident activity.",
         "chart": trend_chart,
     },
 ]
