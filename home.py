@@ -15,9 +15,9 @@ from app_model.recovery import (
     reset_password,
 )
 from app_model.security import (
-    display_password_strength,
     get_password_errors,
     is_valid_email,
+    live_password_input,
 )
 from main import generate_hash, get_username_errors, is_valid_hash
 
@@ -236,7 +236,7 @@ with access_column:
         if login_notice:
             st.success(login_notice)
 
-        with st.form("login_form"):
+        with st.form("login_form", enter_to_submit=True):
             login_username = st.text_input("Username")
             login_password = st.text_input("Password", type="password")
             login_submitted = st.form_submit_button(
@@ -281,7 +281,11 @@ with access_column:
         st.subheader("👤 Create secure account")
         st.caption("Password feedback updates when the password field changes.")
 
-        with st.container(border=True):
+        with st.form(
+            "registration_submit_form",
+            enter_to_submit=False,
+            border=True,
+        ):
             register_username = st.text_input(
                 "New username",
                 key="register_username",
@@ -290,28 +294,21 @@ with access_column:
                 "Recovery email",
                 key="register_email",
             )
-            register_password = st.text_input(
+            register_password = live_password_input(
                 "New password",
-                type="password",
                 key="register_password",
+                theme=ui.get_theme(),
             )
-            display_password_strength(register_password)
-
-            with st.form(
-                "registration_submit_form",
-                enter_to_submit=True,
-                border=False,
-            ):
-                register_confirm_password = st.text_input(
-                    "Confirm new password",
-                    type="password",
-                )
-                register_submitted = st.form_submit_button(
-                    "Register",
-                    type="primary",
-                    icon=":material/person_add:",
-                    width="stretch",
-                )
+            register_confirm_password = st.text_input(
+                "Confirm new password",
+                type="password",
+            )
+            register_submitted = st.form_submit_button(
+                "Register",
+                type="primary",
+                icon=":material/person_add:",
+                width="stretch",
+            )
 
         if register_submitted:
             if register_password != register_confirm_password:
@@ -356,7 +353,7 @@ with access_column:
                     "you cannot receive a reset code."
                 )
 
-            with st.form("request_reset_code_form"):
+            with st.form("request_reset_code_form", enter_to_submit=False):
                 recovery_identifier = st.text_input(
                     "Username or recovery email",
                     key="recovery_identifier",
@@ -394,30 +391,31 @@ with access_column:
 
             reset_username = get_reset_username()
 
-            with st.container(border=True):
+            with st.form(
+                "password_reset_submit_form",
+                enter_to_submit=False,
+                border=True,
+            ):
                 reset_code = st.text_input(
                     "Six-digit reset code",
                     max_chars=6,
                     key="recovery_reset_code",
                 )
-                recovery_password = st.text_input(
+                recovery_password = live_password_input(
                     "New password",
-                    type="password",
                     key="recovery_new_password",
+                    theme=ui.get_theme(),
                 )
-                display_password_strength(recovery_password)
-
-                with st.form("password_reset_submit_form", border=False):
-                    recovery_confirm_password = st.text_input(
-                        "Confirm new password",
-                        type="password",
-                    )
-                    reset_submitted = st.form_submit_button(
-                        "Reset password",
-                        type="primary",
-                        icon=":material/lock_reset:",
-                        width="stretch",
-                    )
+                recovery_confirm_password = st.text_input(
+                    "Confirm new password",
+                    type="password",
+                )
+                reset_submitted = st.form_submit_button(
+                    "Reset password",
+                    type="primary",
+                    icon=":material/lock_reset:",
+                    width="stretch",
+                )
 
             if reset_submitted:
                 password_reset, reset_message = reset_password(

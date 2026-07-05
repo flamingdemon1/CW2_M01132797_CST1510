@@ -1,6 +1,18 @@
 """Shared password validation and strength display helpers."""
 
+from pathlib import Path
+
 import streamlit as st
+import streamlit.components.v1 as components
+
+from app_model.ui import THEMES
+
+
+LIVE_PASSWORD_COMPONENT = Path(__file__).parent / "components" / "live_password"
+_live_password_component = components.declare_component(
+    "gatekeeper_live_password",
+    path=LIVE_PASSWORD_COMPONENT,
+)
 
 
 def is_valid_email(email):
@@ -105,6 +117,41 @@ def display_password_strength(password):
 
     label, score, _colour, feedback = get_password_strength(password)
 
-    # A native Streamlit progress bar reruns naturally when the input changes.
+    # This native display is retained as the fallback for the live component.
     st.progress(score, text=f"Password strength: {label} ({score}%)")
     st.caption(feedback)
+
+
+def live_password_input(label, key, theme="dark"):
+    """Return a password while showing private, per-keystroke visual feedback."""
+    palette = THEMES.get(theme, THEMES["dark"])
+
+    try:
+        password = _live_password_component(
+            label=label,
+            theme=theme,
+            colours={
+                "card": palette["card"],
+                "surface": palette["surface"],
+                "input": palette["input"],
+                "border": palette["border"],
+                "border_soft": palette["border_soft"],
+                "text": palette["text"],
+                "muted": palette["muted"],
+                "primary_border": palette["primary_border"],
+                "success": palette["success"],
+                "warning": palette["warning"],
+                "danger": palette["danger"],
+            },
+            default="",
+            key=key,
+            tab_index=0,
+        )
+    except Exception:
+        # Native Streamlit password inputs do not reliably trigger a Python
+        # rerun on every keystroke, so true per-character feedback requires a
+        # small frontend component. This remains a safe native fallback.
+        password = st.text_input(label, type="password", key=f"{key}_fallback")
+        display_password_strength(password)
+
+    return password if isinstance(password, str) else ""

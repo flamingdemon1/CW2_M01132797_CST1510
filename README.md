@@ -269,6 +269,8 @@ four dashboard visualisations are displayed without removing any chart.
 ## Security and Privacy Notes
 
 - Passwords are hashed with bcrypt before database storage.
+- Live password-strength feedback is visual guidance; final validation and
+  bcrypt hashing still happen in Python.
 - Password hashes are not displayed in user listings.
 - Login errors do not reveal whether a username or password was incorrect.
 - Streamlit protected pages check authenticated session state.

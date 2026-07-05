@@ -4,9 +4,9 @@ import streamlit as st
 
 from app_model import db, schema, ui, users
 from app_model.security import (
-    display_password_strength,
     get_password_errors,
     is_valid_email,
+    live_password_input,
 )
 from main import generate_hash, is_valid_hash
 
@@ -176,7 +176,7 @@ ui.section_heading(
     "This address receives time-limited password reset codes.",
 )
 
-with st.form("recovery_email_form"):
+with st.form("recovery_email_form", enter_to_submit=False):
     new_recovery_email = st.text_input(
         "Recovery email",
         value=recovery_email or "",
@@ -210,35 +210,32 @@ ui.section_card(
 )
 st.write("")
 
-with st.container(border=True):
+with st.form(
+    "profile_password_submit_form",
+    enter_to_submit=False,
+    border=True,
+):
     current_password = st.text_input(
         "Current password",
         type="password",
         key="profile_current_password",
     )
-    new_password = st.text_input(
+    new_password = live_password_input(
         "New password",
-        type="password",
         key="profile_new_password",
+        theme=ui.get_theme(),
     )
-    display_password_strength(new_password)
-
-    with st.form(
-        "profile_password_submit_form",
-        enter_to_submit=True,
-        border=False,
-    ):
-        confirm_password = st.text_input(
-            "Confirm new password",
-            type="password",
-            key="profile_confirm_password",
-        )
-        change_submitted = st.form_submit_button(
-            "Change password",
-            type="primary",
-            icon=":material/lock_reset:",
-            width="stretch",
-        )
+    confirm_password = st.text_input(
+        "Confirm new password",
+        type="password",
+        key="profile_confirm_password",
+    )
+    change_submitted = st.form_submit_button(
+        "Change password",
+        type="primary",
+        icon=":material/lock_reset:",
+        width="stretch",
+    )
 
 if change_submitted:
     password_changed, result_message = change_password(

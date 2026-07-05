@@ -397,6 +397,38 @@ def apply_theme():
             background-color: var(--gk-input) !important;
         }}
 
+        /* Remove BaseWeb's extra button box around password visibility icons. */
+        div[data-baseweb="input"] button,
+        div[data-baseweb="base-input"] button {{
+            border: 0 !important;
+            border-radius: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            color: var(--gk-muted) !important;
+        }}
+
+        [data-testid="stCustomComponentV1"],
+        [data-testid="stCustomComponentV1"] iframe {{
+            display: block !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            outline: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }}
+
+        [data-testid="stCustomComponentV1"]:focus,
+        [data-testid="stCustomComponentV1"]:focus-visible {{
+            border: 0 !important;
+            outline: 0 !important;
+            box-shadow: none !important;
+        }}
+
+        /* Keep Enter enabled without showing Streamlit's instructional hint. */
+        [data-testid="InputInstructions"] {{
+            display: none !important;
+        }}
+
         [data-testid="stMultiSelect"] input {{
             background: transparent !important;
         }}
@@ -474,9 +506,10 @@ def apply_theme():
         }}
 
         [data-testid="stAlert"] {{
-            border: 1px solid var(--gk-border);
+            border: 0 !important;
             background: var(--gk-surface);
             color: var(--gk-text);
+            box-shadow: none !important;
         }}
 
         [data-testid="stDataFrame"],

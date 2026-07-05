@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --gk-card: #0b1220;
+      --gk-surface: #0b1220;
+      --gk-input: #07101c;
+      --gk-border: #1e3a4f;
+      --gk-border-soft: #172638;
+      --gk-text: #f4f7fb;
+      --gk-muted: #a8b4c6;
+      --gk-primary-border: #0891b2;
+      --gk-danger: #e11d48;
+      --gk-warning: #d97706;
+      --gk-success: #059669;
+    }
+
+    :root[data-theme="light"] {
+      --gk-card: #ffffff;
+      --gk-surface: #ffffff;
+      --gk-input: #ffffff;
+      --gk-border: #b8cbd9;
+      --gk-border-soft: #d7e3ec;
+      --gk-text: #102235;
+      --gk-muted: #526579;
+      --gk-primary-border: #036b86;
+      --gk-danger: #be123c;
+      --gk-warning: #b45309;
+      --gk-success: #047857;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      min-height: 0;
+      background-color: transparent !important;
+      background-image: none !important;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: transparent;
+      color: var(--gk-text);
+      font-family: "Source Sans 3", "Source Sans Pro", sans-serif;
+      font-size: 14px;
+    }
+
+    label {
+      display: block;
+      margin: 0 0 0.4rem;
+      font-weight: 600;
+    }
+
+    input {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 100%;
+      height: 2.5rem;
+      min-height: 2.5rem;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--gk-border);
+      border-radius: 0.5rem;
+      outline: none;
+      background: var(--gk-input) !important;
+      color: var(--gk-text);
+      -webkit-text-fill-color: var(--gk-text);
+      font: inherit;
+    }
+
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus {
+      -webkit-text-fill-color: var(--gk-text);
+      box-shadow: 0 0 0 1000px var(--gk-input) inset;
+      caret-color: var(--gk-text);
+    }
+
+    input:focus {
+      border-color: var(--gk-primary-border);
+      box-shadow: 0 0 0 1px var(--gk-primary-border);
+    }
+
+    .strength-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-top: 0.65rem;
+      color: var(--gk-muted);
+      font-size: 0.82rem;
+    }
+
+    .track {
+      height: 0.32rem;
+      margin-top: 0.4rem;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--gk-border-soft);
+    }
+
+    .bar {
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--gk-danger);
+      transition: width 100ms ease, background-color 100ms ease;
+    }
+
+    .requirements {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.35rem 0.8rem;
+      margin: 0.75rem 0 0;
+      color: var(--gk-muted);
+      font-size: 0.78rem;
+    }
+
+    .requirement {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      line-height: 1.35;
+    }
+
+    .requirement::before {
+      width: 0.42rem;
+      height: 0.42rem;
+      flex: 0 0 0.42rem;
+      border-radius: 2px;
+      background: var(--gk-border-soft);
+      content: "";
+    }
+
+    .requirement.met {
+      color: var(--gk-success);
+    }
+
+    .requirement.met::before {
+      background: var(--gk-success);
+    }
+
+    @media (max-width: 430px) {
+      .requirements { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <label id="field-label" for="password-field">New password</label>
+  <input
+    id="password-field"
+    type="password"
+    autocomplete="new-password"
+    spellcheck="false"
+  >
+  <div class="strength-row">
+    <span>Password strength</span>
+    <strong id="strength-label" role="status" aria-live="polite">Start typing</strong>
+  </div>
+  <div class="track" aria-hidden="true"><div id="strength-bar" class="bar"></div></div>
+  <div class="requirements" aria-label="Password requirements">
+    <span id="length-check" class="requirement">8 or more characters</span>
+    <span id="uppercase-check" class="requirement">Uppercase letter</span>
+    <span id="number-check" class="requirement">Number</span>
+    <span id="symbol-check" class="requirement">Symbol</span>
+  </div>
+
+  <script>
+    const input = document.getElementById("password-field");
+    const label = document.getElementById("field-label");
+    const strengthLabel = document.getElementById("strength-label");
+    const strengthBar = document.getElementById("strength-bar");
+
+    const checks = {
+      length: document.getElementById("length-check"),
+      uppercase: document.getElementById("uppercase-check"),
+      number: document.getElementById("number-check"),
+      symbol: document.getElementById("symbol-check"),
+    };
+
+    function send(type, data = {}) {
+      window.parent.postMessage({
+        isStreamlitMessage: true,
+        type,
+        ...data,
+      }, "*");
+    }
+
+    function setFrameHeight() {
+      send("streamlit:setFrameHeight", { height: document.body.scrollHeight + 4 });
+    }
+
+    function setComponentValue(value) {
+      send("streamlit:setComponentValue", { value, dataType: "json" });
+    }
+
+    function setRequirement(element, passed, text) {
+      element.classList.toggle("met", passed);
+      element.textContent = text;
+    }
+
+    function calculateStrength(password) {
+      const requirements = {
+        length: password.length >= 8,
+        uppercase: /[A-Z]/.test(password),
+        lowercase: /[a-z]/.test(password),
+        number: /[0-9]/.test(password),
+        symbol: /[^A-Za-z0-9]/.test(password),
+        long: password.length >= 12,
+      };
+
+      let score = 0;
+      if (requirements.length) score += 20;
+      if (requirements.uppercase) score += 15;
+      if (requirements.lowercase) score += 15;
+      if (requirements.number) score += 15;
+      if (requirements.symbol) score += 20;
+      if (requirements.long) score += 15;
+
+      let strength = { label: "Very weak", colour: "var(--gk-danger)" };
+      if (score > 80) strength = { label: "Very strong", colour: "var(--gk-success)" };
+      else if (score > 60) strength = { label: "Strong", colour: "var(--gk-success)" };
+      else if (score > 40) strength = { label: "Medium", colour: "var(--gk-warning)" };
+      else if (score > 20) strength = { label: "Weak", colour: "var(--gk-danger)" };
+
+      return { score, requirements, ...strength };
+    }
+
+    function updateFeedback(sendValue = true) {
+      const password = input.value;
+      const result = calculateStrength(password);
+
+      strengthLabel.textContent = password ? `${result.label} (${result.score}%)` : "Start typing";
+      strengthBar.style.width = `${result.score}%`;
+      strengthBar.style.backgroundColor = result.colour;
+
+      setRequirement(checks.length, result.requirements.length, "8 or more characters");
+      setRequirement(checks.uppercase, result.requirements.uppercase, "Uppercase letter");
+      setRequirement(checks.number, result.requirements.number, "Number");
+      setRequirement(checks.symbol, result.requirements.symbol, "Symbol");
+
+      if (sendValue) setComponentValue(password);
+      setFrameHeight();
+    }
+
+    window.addEventListener("message", event => {
+      if (event.data.type !== "streamlit:render") return;
+
+      const args = event.data.args || {};
+      document.documentElement.dataset.theme = args.theme === "light" ? "light" : "dark";
+      const colours = args.colours || {};
+      Object.entries(colours).forEach(([name, value]) => {
+        const variableName = `--gk-${name.replaceAll("_", "-")}`;
+        document.documentElement.style.setProperty(variableName, value);
+      });
+      label.textContent = args.label || "New password";
+      updateFeedback(false);
+    });
+
+    input.addEventListener("input", () => updateFeedback(true));
+    window.addEventListener("resize", setFrameHeight);
+
+    send("streamlit:componentReady", { apiVersion: 1 });
+    setFrameHeight();
+  </script>
+</body>
+</html>
