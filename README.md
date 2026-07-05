@@ -21,6 +21,7 @@ dataset logic are separated into small Python modules.
 - Normal-user and administrator roles in the CLI.
 - Recovery-email management and SendGrid password-reset codes.
 - Protected Streamlit Dashboard, Profile, and SmartBoyAI pages.
+- Role-protected Admin monitoring page for users, saved results, and database tables.
 - Cyber-incident metrics, filters, charts, heatmap, timeline, and paginated table.
 - User-selectable dashboard visualisations with all four charts enabled by default.
 - Streamlit dashboard summaries saved to the shared SQLite results table.
@@ -268,6 +269,13 @@ four dashboard visualisations are displayed without removing any chart.
 The visualisations follow standard data-visualisation principles: clear titles,
 labelled axes, appropriate chart types, consistent colours, and reduced clutter.
 
+## Admin Monitoring
+
+The role-protected Admin page provides safe system monitoring. Administrators
+can update user roles and add or replace recovery emails for users who cannot
+reset their password. The final administrator cannot be demoted, and password
+hashes, reset codes, API keys, and secrets are never displayed.
+
 ## Security and Privacy Notes
 
 - Passwords are hashed with bcrypt before database storage.
@@ -278,6 +286,8 @@ labelled axes, appropriate chart types, consistent colours, and reduced clutter.
 - Streamlit protected pages check authenticated session state.
 - CLI administrator actions require a logged-in administrator role.
 - Secrets are loaded from ignored local configuration or environment variables.
+- Admin monitoring is read-only and never displays password hashes, reset codes,
+  API keys, secrets, or full recovery email addresses.
 
 Native Streamlit text/password inputs do not reliably provide true
 per-keystroke updates for instant feedback. Gatekeeper therefore uses a small

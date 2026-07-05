@@ -1,3 +1,6 @@
+ALLOWED_ROLES = {"user", "admin"}
+
+
 def add_user(conn, username, password_hash, email=None):
     """Add a new user to the users table."""
     cursor = conn.cursor()
@@ -63,6 +66,82 @@ def get_all_users(conn):
 
     cursor.execute(sql)
     return cursor.fetchall()
+
+
+def get_all_users_safe(conn):
+    """Return account details that are safe to display to administrators."""
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(users);")
+    columns = {column["name"] for column in cursor.fetchall()}
+    created_column = ", created_at" if "created_at" in columns else ""
+    cursor.execute(
+        f"""
+        SELECT
+            username,
+            COALESCE(role, 'user') AS role,
+            CASE
+                WHEN email IS NOT NULL AND TRIM(email) <> '' THEN 'Configured'
+                ELSE 'Not configured'
+            END AS recovery_email_status
+            {created_column}
+        FROM users
+        ORDER BY username COLLATE NOCASE;
+        """
+    )
+    return cursor.fetchall()
+
+
+def count_admin_users(conn):
+    """Return the number of accounts that currently have the admin role."""
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT COUNT(*) AS total FROM users WHERE LOWER(role) = 'admin';"
+    )
+    return cursor.fetchone()["total"]
+
+
+def update_user_role(conn, username, role):
+    """Safely update one role while preserving at least one administrator."""
+    normalised_role = role.strip().lower()
+
+    if normalised_role not in ALLOWED_ROLES:
+        raise ValueError("Role must be either user or admin.")
+
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT COALESCE(role, 'user') AS role FROM users WHERE username = ?;",
+        (username,),
+    )
+    account = cursor.fetchone()
+
+    if account is None:
+        raise ValueError("The selected account could not be found.")
+
+    current_role = str(account["role"]).strip().lower()
+
+    if (
+        current_role == "admin"
+        and normalised_role != "admin"
+        and count_admin_users(conn) <= 1
+    ):
+        raise ValueError("The final administrator account cannot be demoted.")
+
+    cursor.execute(
+        "UPDATE users SET role = ? WHERE username = ?;",
+        (normalised_role, username),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def update_recovery_email(conn, username, email):
+    """Add or replace one user's recovery email address."""
+    normalised_email = email.strip().lower()
+
+    if not normalised_email:
+        raise ValueError("Recovery email cannot be empty.")
+
+    return update_email(conn, username, normalised_email)
 
 
 def update_user(conn, old_username, new_username):
