@@ -2,7 +2,6 @@
 
 import sqlite3
 import streamlit as st
-
 from app_model import db, schema, ui, users
 from app_model.email_service import (
     is_local_reset_fallback_enabled,
@@ -44,7 +43,7 @@ ui.sidebar_theme_control("home")
 
 
 def show_auth_view(view_name):
-    """Switch the account panel without relying on Streamlit tabs."""
+    """Switch the account panel """
     current_view = st.session_state.get("auth_view", "login")
 
     if current_view == "recovery" and view_name != "recovery":

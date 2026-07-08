@@ -2,9 +2,7 @@
 
 import secrets
 import time
-
 import streamlit as st
-
 from app_model import db, schema, users
 from app_model.email_service import (
     is_local_reset_fallback_enabled,
@@ -19,7 +17,7 @@ RESET_CODE_LIFETIME_SECONDS = 10 * 60
 
 
 def request_reset_code(identifier):
-    """Create and email a short-lived reset code for one account."""
+    """Create and email a temporary reset code ."""
     identifier = identifier.strip()
 
     if not identifier:

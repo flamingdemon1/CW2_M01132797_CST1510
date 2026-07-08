@@ -1,28 +1,28 @@
-"""Beginner-friendly helpers for exporting Gatekeeper results."""
+"""Helpers for exporting Gatekeeper results to files or SQLite."""
 
 import csv
 from datetime import datetime
-
 from app_model import schema
 from app_model.db import DATA_FOLDER
 
 
 EXPORT_FOLDER = DATA_FOLDER / "exports"
 
+#used underscores before some functions to indicate it is for private use only
 
-def _created_at():
-    """Return one readable timestamp for files and database records."""
+def _creation_time():
+    """Returns a timestamp for files and database records."""
     return datetime.now().isoformat(timespec="seconds")
 
 
 def _safe_filename(title):
-    """Convert a result title into a safe, simple filename."""
+    """Makes sure a title is safe to use."""
     safe_characters = []
 
-    for character in title.strip().lower():
-        if character.isalnum():
-            safe_characters.append(character)
-        elif character in {" ", "_", "-"}:
+    for char in title.strip().lower():
+        if char.isalnum():
+            safe_characters.append(char)
+        elif char in {" ", "_", "-"}:
             safe_characters.append("_")
 
     safe_name = "".join(safe_characters).strip("_")
@@ -42,13 +42,14 @@ def save_result_to_text(
     content,
     save_source="CLI",
 ):
-    """Save a result and its basic details in a UTF-8 text file."""
+    """Save raw results in a UTF-8 text file."""
     _validate_content(content)
     EXPORT_FOLDER.mkdir(parents=True, exist_ok=True)
-    created_at = _created_at()
-    timestamp_for_file = created_at.replace(":", "-")
+    created_at = _creation_time()
+    #we use hypens instead of colons because colons aren't allowed in windows filenames
+    ts = created_at.replace(":", "-")
     file_path = EXPORT_FOLDER / (
-        f"{_safe_filename(title)}_{timestamp_for_file}.txt"
+        f"{_safe_filename(title)}_{ts}.txt"
     )
     text = (
         f"Title: {title}\n"
@@ -67,20 +68,20 @@ def save_result_to_csv(
     result_type,
     title,
     content,
-    tabular_data=None,
+    df=None,
     save_source="CLI",
 ):
-    """Save tabular results, or one text result row, in CSV format."""
+    """Handles both pandas df exports and single-row fallbacks."""
     _validate_content(content)
     EXPORT_FOLDER.mkdir(parents=True, exist_ok=True)
-    created_at = _created_at()
-    timestamp_for_file = created_at.replace(":", "-")
+    created_at = _creation_time()
+    ts = created_at.replace(":", "-")
     file_path = EXPORT_FOLDER / (
-        f"{_safe_filename(title)}_{timestamp_for_file}.csv"
+        f"{_safe_filename(title)}_{ts}.csv"
     )
 
-    if tabular_data is not None and not tabular_data.empty:
-        csv_data = tabular_data.copy()
+    if df is not None and not df.empty:
+        csv_data = df.copy()
         csv_data.insert(0, "save_username", username)
         csv_data.insert(1, "save_result_type", result_type)
         csv_data.insert(2, "save_title", title)
@@ -144,43 +145,31 @@ def save_result_to_database(
             result_type,
             title,
             str(content),
-            _created_at(),
+            _creation_time(),
             save_source,
         ),
     )
     conn.commit()
     return cursor.lastrowid
 
-
-def get_saved_results(conn, username=None):
-    """Return saved-result summaries, optionally for one username only."""
+def get_saved_result(conn, result_id, username=None):
+    """Get one saved result, with an owner check when username is given."""
     schema.create_saved_results_table(conn)
     cursor = conn.cursor()
 
-    if username is None:
-        cursor.execute(
-            """
-            SELECT id, username, result_type, title, created_at, save_source
-            FROM saved_results
-            ORDER BY id DESC;
-            """
-        )
-    else:
-        cursor.execute(
-            """
-            SELECT id, username, result_type, title, created_at, save_source
-            FROM saved_results
-            WHERE username = ?
-            ORDER BY id DESC;
-            """,
-            (username,),
-        )
+    sql = "SELECT * FROM saved_results WHERE id = ?"
+    params = [result_id]
 
-    return cursor.fetchall()
+    if username is not None:
+        sql += " AND username = ?"
+        params.append(username)
+
+    cursor.execute(sql, tuple(params))
+    return cursor.fetchone()
 
 
 def get_saved_result(conn, result_id, username=None):
-    """Return one complete saved result, with optional owner filtering."""
+    """Return one complete saved result with optional owner filtering."""
     schema.create_saved_results_table(conn)
     cursor = conn.cursor()
 

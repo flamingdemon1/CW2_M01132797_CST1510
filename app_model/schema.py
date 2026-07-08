@@ -26,7 +26,7 @@ def create_user_table(conn):
 
 
 def create_saved_results_table(conn):
-    """Create the table used for saved CLI results if it is missing."""
+    """Create the table shared by CLI and Streamlit saved results."""
     cursor = conn.cursor()
     cursor.execute(
         """

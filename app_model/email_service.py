@@ -1,12 +1,16 @@
 """SendGrid email helpers for Gatekeeper password recovery."""
 
 import os
-
 import streamlit as st
 
 
-# These are the example values shown in setup instructions. Treating them as
-# unconfigured prevents the app from trying to use the examples as real keys.
+# AI assistance was used to help implement and debug the SendGrid
+# password-recovery integration using the official SendGrid Python example.
+
+
+
+# Example values from secrets.toml.example
+# If these are still present it means that the user has not configured SendGrid yet.
 SENDGRID_PLACEHOLDERS = {
     "put_your_sendgrid_api_key_here",
     "put_your_verified_sender_email_here",
@@ -16,31 +20,19 @@ SENDGRID_PLACEHOLDERS = {
 
 
 def is_local_reset_fallback_enabled():
-    """Return whether local testing may show an undelivered reset code."""
+    """Check whether local recovery-code fallback is enabled."""
     try:
         setting = st.secrets.get("ALLOW_LOCAL_RESET_FALLBACK", None)
-
-        # Keep older local settings working while the new name is adopted.
-        if setting is None:
-            setting = st.secrets.get("PASSWORD_RESET_DEMO_MODE", None)
     except Exception:
         setting = None
 
     if setting is None:
-        setting = os.getenv("ALLOW_LOCAL_RESET_FALLBACK")
-
-    if setting is None:
-        setting = os.getenv("PASSWORD_RESET_DEMO_MODE", "false")
+        setting = os.getenv("ALLOW_LOCAL_RESET_FALLBACK", "false")
 
     if isinstance(setting, bool):
         return setting
 
     return str(setting).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def is_demo_mode_enabled():
-    """Backward-compatible alias for older coursework code."""
-    return is_local_reset_fallback_enabled()
 
 
 def get_sendgrid_settings():
@@ -114,12 +106,5 @@ def send_password_reset_email(to_email, reset_code):
 
         return False, "SendGrid did not accept the reset email."
 
-    except Exception as error:
-        status_code = getattr(error, "status_code", None)
-        if status_code is None:
-            status_code = getattr(error, "code", None)
-
-        if status_code is not None:
-            return False, f"SendGrid rejected the email (status {status_code})."
-
+    except Exception:
         return False, "The reset email could not be sent."

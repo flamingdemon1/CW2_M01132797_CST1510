@@ -137,7 +137,7 @@ def get_groq_api_key():
 
 
 def is_prompt_in_scope(prompt, earlier_messages):
-    """Return True only for Gatekeeper, cybersecurity, or IT support prompts."""
+    """Reject clearly unrelated prompts while allowing relevant follow-ups."""
     prompt_lower = prompt.strip().lower()
 
     if any(term in prompt_lower for term in ALLOWED_SCOPE_TERMS):

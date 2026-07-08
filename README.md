@@ -26,10 +26,21 @@ dataset logic are separated into small Python modules.
 - User-selectable dashboard visualisations with all four charts enabled by default.
 - Streamlit dashboard summaries saved to the shared SQLite results table.
 - SmartBoyAI support for cybersecurity, IT tickets, and dataset questions.
-- SQLite storage for users, migrated datasets, and saved CLI results.
+- SQLite storage for users, migrated datasets, and saved results.
 - CSV-to-SQLite migration from the required `DATA/` coursework files.
 - Rich CLI panels, tables, and coloured status messages.
-- Text, CSV, and SQLite result saving from CLI data previews.
+- Shared text, CSV, and SQLite result-saving helpers.
+
+### Coursework Core and Extensions
+
+The assessed coursework path is registration/login, bcrypt password handling,
+SQLite user CRUD, CSV migration, modular `app_model` code, a dynamic Streamlit
+dashboard, protected multipage access, and a dataset-aware chat assistant.
+
+Profile management, SendGrid recovery, role-based Admin monitoring, Rich CLI
+presentation, theme styling, pagination, heatmaps, and saved dashboard summaries
+are extensions. They support the core system rather than replacing any required
+coursework feature.
 
 ## Project Structure
 
@@ -39,9 +50,11 @@ main.py                         Rich command-line application
 pages/1_dashboard.py            Protected cyber-incident dashboard
 pages/2_SmartBoyAI.py           Protected Groq assistant
 pages/3_Profile.py              Protected account profile
+pages/4_Admin.py                Role-protected monitoring and account management
 app_model/db.py                 SQLite connection and data paths
 app_model/schema.py             Database table creation
 app_model/users.py              User database operations
+app_model/security.py           Shared validation and live strength feedback
 app_model/email_service.py      SendGrid configuration and email delivery
 app_model/recovery.py           Reset-code generation and password recovery
 app_model/export_service.py     Text, CSV, and SQLite result saving
@@ -169,7 +182,7 @@ include:
 - `cyber_incidents`: migrated cyber-incident records.
 - `it_tickets`: migrated IT-support ticket records.
 - `datasets_metadata`: migrated dataset information.
-- `saved_results`: CLI results saved for later viewing.
+- `saved_results`: summaries saved by the CLI/export helpers and Streamlit dashboard.
 
 The database file is local and ignored by Git. On a fresh setup, the user table
 is created automatically. Dataset tables are created when an administrator uses
@@ -239,16 +252,14 @@ roles, database operations, or password security. The CLI uses Rich for:
 - Coloured success, warning, information, and error messages.
 - Registered-user tables.
 - Dataset-preview tables.
-- Saved-result tables and content panels.
 
 ## Text, CSV, and Database Exports
 
-After displaying a five-row migrated-data preview, the CLI offers:
+The shared `app_model/export_service.py` module supports:
 
 1. Save to a UTF-8 text file.
 2. Save to a CSV file.
 3. Save to the SQLite database.
-4. Do not save.
 
 Text and CSV files are written to `DATA/exports/`. CSV exports preserve the
 displayed rows and add save metadata. Database exports are inserted into
@@ -257,9 +268,6 @@ displayed rows and add save metadata. Database exports are inserted into
 ```text
 id, username, result_type, title, content, created_at, save_source
 ```
-
-CLI menu option 12 displays saved records. Normal users can view their own
-records, while administrators can view all saved records.
 
 The protected Streamlit dashboard can also save its current filtered summary to
 the same `saved_results` table. The summary includes the active severity filter,
@@ -286,13 +294,13 @@ hashes, reset codes, API keys, and secrets are never displayed.
 - Streamlit protected pages check authenticated session state.
 - CLI administrator actions require a logged-in administrator role.
 - Secrets are loaded from ignored local configuration or environment variables.
-- Admin monitoring is read-only and never displays password hashes, reset codes,
-  API keys, secrets, or full recovery email addresses.
-
-Native Streamlit text/password inputs do not reliably provide true
-per-keystroke updates for instant feedback. Gatekeeper therefore uses a small
-local frontend component only for the live strength display; final password
-validation and bcrypt hashing remain in Python.
+- Admin monitoring never displays password hashes, reset codes, API keys,
+  secrets, or full recovery email addresses. Its controlled write actions are
+  limited to validated role and recovery-email updates.
+- Native Streamlit text/password inputs do not reliably provide true
+  per-keystroke updates for instant feedback. Gatekeeper therefore uses a small
+  local frontend component only for the live strength display; final password
+  validation and bcrypt hashing remain in Python.
 - SmartBoyAI context excludes user accounts, password hashes, and API keys.
 - Exported dashboard previews do not include account credentials.
 

@@ -1,4 +1,4 @@
-"""Read-only administrator monitoring page for Gatekeeper."""
+"""Administrator monitoring and controlled account-management page."""
 
 import sqlite3
 

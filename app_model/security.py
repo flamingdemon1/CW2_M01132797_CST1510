@@ -1,12 +1,13 @@
 """Shared password validation and strength display helpers."""
 
 from pathlib import Path
-
 import streamlit as st
 import streamlit.components.v1 as components
-
 from app_model.ui import THEMES
 
+
+# AI assistance was used for the custom live password-strength component.
+# Final password validation still happens in Python using get_password_errors(). 
 
 LIVE_PASSWORD_COMPONENT = Path(__file__).parent / "components" / "live_password"
 _live_password_component = components.declare_component(
@@ -82,7 +83,8 @@ def get_password_strength(password):
 
     if len(password) >= 12:
         score += 15
-
+     
+    #Use colour codes to indicate password strengths
     if score <= 20:
         label, colour = "Very weak", "#8B0000"
     elif score <= 40:

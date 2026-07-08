@@ -5,6 +5,12 @@ from app_model import db, schema, users as user_model
 from app_model.logic import cyber_incidents, metadatas, it_tickets
 
 
+# AI assistance was used for SQLite and CSV migration improvements,
+# Rich CLI presentation, refactoring suggestions, and debugging.
+
+
+
+# Use exception handling to make sure rich is insalled , if not the program will not immediately crash
 try:
     from rich.console import Console
     from rich.panel import Panel
@@ -13,29 +19,31 @@ try:
 
     RICH_AVAILABLE = True
     console = Console()
+    # if the exception is raised, rich is not installed and RICH_AVAILABLE is set to false.
 except ImportError:
     RICH_AVAILABLE = False
     console = None
     Panel = Rule = Table = None
 
 
-def print_success(message):
-    """Display a green CLI success message."""
+ # functions to help avoid repetition later in the program.
+def print_successmsg(message):
+    """Function to display a green success message."""
     console.print(message, style="bold green")
 
 
-def print_error(message):
-    """Display a red CLI error message."""
+def print_errormsg(message):
+    """Function to display a red  error message."""
     console.print(message, style="bold red")
 
 
-def print_warning(message):
-    """Display a yellow CLI warning message."""
+def print_warningmsg(message):
+    """Function to display a yellow  warning message."""
     console.print(message, style="yellow")
 
 
-def print_info(message):
-    """Display a cyan CLI information message."""
+def print_infomsg(message):
+    """Function to display a cyan  info message."""
     console.print(message, style="cyan")
 
 
@@ -44,8 +52,9 @@ def display_dataframe(data, title):
     preview = data.head()
     table = Table(title=title, header_style="bold cyan", border_style="blue")
 
-    for column in preview.columns:
-        table.add_column(str(column))
+    # rich expects strings, so str(coloumn) ensures every heading is text.
+    for coloumn in preview.columns:
+        table.add_column(str(coloumn))
 
     for row in preview.itertuples(index=False, name=None):
         table.add_row(*(str(value) for value in row))
@@ -54,7 +63,7 @@ def display_dataframe(data, title):
 
 
 def display_main_menu(current_user, current_role):
-    """Display the Gatekeeper CLI menu in a compact Rich panel."""
+    """Display the Gatekeeper's CLI  menu """
     session_text = "Guest"
 
     if current_user is not None:
@@ -63,7 +72,7 @@ def display_main_menu(current_user, current_role):
     menu = Table.grid(padding=(0, 2))
     menu.add_column(style="bold cyan", justify="right")
     menu.add_column(style="white")
-
+   
     options = [
         ("1", "Register"),
         ("2", "Log in"),
@@ -93,7 +102,7 @@ def display_main_menu(current_user, current_role):
 
 
 def generate_hash(password):
-    """Convert a plain password into a bcrypt hash."""
+    """Convert  plain text into a bcrypt hash."""
     password_bytes = password.encode("utf-8")
     salt = bcrypt.gensalt()
     hashed_password = bcrypt.hashpw(password_bytes, salt)
@@ -110,9 +119,10 @@ def is_valid_hash(password, stored_hash):
 
 
 def is_strong_password(password):
-    """Check whether a password meets basic strength requirements."""
+    """Check whether passwords meet the pre-determined requirements."""
     errors = []
-
+    # this operates on a point based system, where more points are awarded for stronger passwords and-
+    # the opposite for weaker ones.
     if len(password) < 8:
         errors.append("Password must be at least 8 characters long.")
 
@@ -126,9 +136,9 @@ def is_strong_password(password):
         errors.append("Password must contain at least one symbol.")
 
     if errors:
-        print_error("Weak password:")
+        print_errormsg("Weak password:")
         for error in errors:
-            print_error(f"- {error}")
+            print_errormsg(f"- {error}")
         return False
 
     return True
@@ -138,6 +148,7 @@ def get_username_errors(username):
     """Return a list of username format problems."""
     errors = []
 
+ # These if statements check for typical username issues and output appropriate error messages.
     if len(username) < 3 or len(username) > 20:
         errors.append("Username must be 3 to 20 characters long.")
 
@@ -153,14 +164,14 @@ def get_username_errors(username):
     return errors
 
 
-def is_valid_username(username):
+def valid_username(username):
     """Check whether a username follows the project rules."""
     errors = get_username_errors(username)
 
     if errors:
-        print_error("Invalid username:")
+        print_errormsg("Invalid username:")
         for error in errors:
-            print_error(f"- {error}")
+            print_errormsg(f"- {error}")
         return False
 
     return True
@@ -169,6 +180,7 @@ def is_valid_username(username):
 def ensure_role_column(conn):
     """Make sure older users tables also have the role column."""
     cursor = conn.cursor()
+   # Used pragma so that we do not have to recreate the users table and lose all existing users.
     cursor.execute("PRAGMA table_info(users);")
     columns = [column["name"] for column in cursor.fetchall()]
 
@@ -195,8 +207,8 @@ def require_admin(current_role, action_name):
     if current_role == "admin":
         return True
 
-    print_error(f"Admin access required to {action_name}.")
-    print_warning("Please log in with an admin account.")
+    print_errormsg(f"Admin access required to {action_name}.")
+    print_warningmsg("Please log in with an admin account.")
     return False
 
 
@@ -207,7 +219,7 @@ def count_admin_users(conn):
     return cursor.fetchone()[0]
 
 
-def set_user_role(conn, username, role):
+def update_role(conn, username, role):
     """Update a user's role."""
     cursor = conn.cursor()
     cursor.execute(
@@ -223,7 +235,7 @@ def set_user_role(conn, username, role):
 
 
 def setup_admin_account(conn, current_role):
-    """Create an admin account for testing without storing a plain password."""
+    """Create an admin account."""
     admin_count = count_admin_users(conn)
 
     if admin_count > 0 and not require_admin(
@@ -234,11 +246,11 @@ def setup_admin_account(conn, current_role):
     console.print(Rule("[bold cyan]Create Admin Account[/bold cyan]"))
 
     if admin_count == 0:
-        print_info("No admin account exists yet, so you can create the first one now.")
+        print_infomsg("No admin account exists yet, so you can create the first one now.")
 
     username = input("Enter the admin username: > ").strip()
 
-    if not is_valid_username(username):
+    if not valid_username(username):
         return
 
     existing_user = user_model.get_user(conn, username)
@@ -249,7 +261,7 @@ def setup_admin_account(conn, current_role):
         )
 
         if existing_role == "admin":
-            print_warning("This account is already an admin.")
+            print_warningmsg("This account is already an admin.")
             return
 
         if admin_count == 0:
@@ -258,7 +270,7 @@ def setup_admin_account(conn, current_role):
             )
 
             if not is_valid_hash(password, existing_user["password_hash"]):
-                print_error("Incorrect password. Admin setup cancelled.")
+                print_errormsg("Incorrect password. Admin setup cancelled.")
                 return
         else:
             confirmation = input(
@@ -266,11 +278,11 @@ def setup_admin_account(conn, current_role):
             ).strip().lower()
 
             if confirmation != "yes":
-                print_warning("Admin setup cancelled.")
+                print_warningmsg("Admin setup cancelled.")
                 return
 
-        set_user_role(conn, username, "admin")
-        print_success("Admin access added to this account.")
+        update_role(conn, username, "admin")
+        print_successmsg("Admin access added to this account.")
         return
 
     while True:
@@ -279,7 +291,7 @@ def setup_admin_account(conn, current_role):
         if is_strong_password(password):
             break
 
-        print_warning("Please try again with a stronger password.")
+        print_warningmsg("Please try again with a stronger password.")
 
     hashed_password = generate_hash(password)
 
@@ -293,21 +305,21 @@ def setup_admin_account(conn, current_role):
     )
     conn.commit()
 
-    print_success("Admin account created successfully.")
-    print_info("You can now log in with this admin account.")
+    print_successmsg("Admin account created successfully.")
+    print_infomsg("You can now log in with this admin account.")
 
 
 def register_user(conn):
     """Register a new user and store their hashed password in SQLite."""
     username = input("Enter your username: > ").strip()
 
-    if not is_valid_username(username):
+    if not valid_username(username):
         return
 
     existing_user = user_model.get_user(conn, username)
 
     if existing_user is not None:
-        print_error("This username already exists. Please choose another one.")
+        print_errormsg("This username already exists. Please choose another one.")
         return
 
     while True:
@@ -316,16 +328,17 @@ def register_user(conn):
         if is_strong_password(password):
             break
 
-        print_warning("Please try again with a stronger password.")
+        print_warningmsg("Please try again with a stronger password.")
 
     hashed_password = generate_hash(password)
 
     try:
         user_model.add_user(conn, username, hashed_password)
-        print_success("User successfully registered!")
-
+        print_successmsg("User successfully registered!")
+     
+    # Error handling to prevent conflicts with data integrity.
     except sqlite3.IntegrityError:
-        print_error("This username already exists. Please choose another one.")
+        print_errormsg("This username already exists. Please choose another one.")
 
 
 def login_user(conn):
@@ -354,7 +367,7 @@ def display_all_users(conn, current_role):
     registered_users = user_model.get_all_users(conn)
 
     if len(registered_users) == 0:
-        print_warning("No users have been registered yet.")
+        print_warningmsg("No users have been registered yet.")
         return
 
     table = Table(
@@ -376,18 +389,18 @@ def display_all_users(conn, current_role):
 def update_username(conn, current_user, current_role):
     """Update a username using either user-level or admin-level access."""
     if current_user is None:
-        print_warning("Please log in before updating a username.")
+        print_warningmsg("Please log in before updating a username.")
         return current_user
 
     if current_role == "admin":
         old_username = input("Enter the username to update: > ").strip()
 
         if old_username == "":
-            print_error("Username cannot be empty.")
+            print_errormsg("Username cannot be empty.")
             return current_user
 
         if user_model.get_user(conn, old_username) is None:
-            print_error("User not found.")
+            print_errormsg("User not found.")
             return current_user
 
     else:
@@ -395,64 +408,64 @@ def update_username(conn, current_user, current_role):
         user = user_model.get_user(conn, current_user)
 
         if user is None:
-            print_error("Your account could not be found. Please log in again.")
+            print_errormsg("Your account could not be found. Please log in again.")
             return current_user
 
         password = getpass("Enter your current password to confirm this change: > ")
 
         if not is_valid_hash(password, user["password_hash"]):
-            print_error("Incorrect password. Username update denied.")
+            print_errormsg("Incorrect password. Username update denied.")
             return current_user
 
-        print_info(f"You are updating your own username: {current_user}")
+        print_infomsg(f"You are updating your own username: {current_user}")
 
     new_username = input("Enter the new username: > ").strip()
     confirm_username = input("Enter the new username again: > ").strip()
 
     if new_username != confirm_username:
-        print_error("Usernames do not match. Username update cancelled.")
+        print_errormsg("Usernames do not match. Username update cancelled.")
         return current_user
 
-    if not is_valid_username(new_username):
+    if not valid_username(new_username):
         return current_user
 
     if new_username == old_username:
-        print_warning("The new username is the same as your current username.")
+        print_warningmsg("The new username is the same as your current username.")
         return current_user
 
     try:
         updated = user_model.update_user(conn, old_username, new_username)
 
         if updated:
-            print_success("Username updated successfully.")
+            print_successmsg("Username updated successfully.")
             if old_username == current_user:
                 return new_username
             return current_user
         else:
-            print_error("User not found.")
+            print_errormsg("User not found.")
             return current_user
 
     except sqlite3.IntegrityError:
-        print_error("The new username already exists. Please choose another one.")
+        print_errormsg("The new username already exists. Please choose another one.")
         return current_user
 
 
 def change_password(conn, current_user):
-    """Allow a logged-in user to change their own password."""
+    """Allow  logged-in users to change their passwords."""
     if current_user is None:
-        print_warning("Please log in before changing your password.")
+        print_warningmsg("Please log in before changing your password.")
         return
 
     user = user_model.get_user(conn, current_user)
 
     if user is None:
-        print_error("Your account could not be found. Please log in again.")
+        print_errormsg("Your account could not be found. Please log in again.")
         return
 
     current_password = getpass("Enter your current password: > ")
 
     if not is_valid_hash(current_password, user["password_hash"]):
-        print_error("Incorrect password. Password change denied.")
+        print_errormsg("Incorrect password. Password change denied.")
         return
 
     show_password = input(
@@ -467,44 +480,44 @@ def change_password(conn, current_user):
         confirm_password = getpass("Enter your new password again: > ")
 
     if new_password != confirm_password:
-        print_error("New passwords do not match. Password change cancelled.")
+        print_errormsg("New passwords do not match. Password change cancelled.")
         return
 
     if not is_strong_password(new_password):
-        print_warning("Password change cancelled.")
+        print_warningmsg("Password change cancelled.")
         return
 
     new_password_hash = generate_hash(new_password)
     updated = user_model.update_password(conn, current_user, new_password_hash)
 
     if updated:
-        print_success("Password updated successfully.")
+        print_successmsg("Password updated successfully.")
     else:
-        print_error("Password could not be updated.")
+        print_errormsg("Password could not be updated.")
 
 
 def delete_user(conn, current_role):
-    """Delete an existing user if the logged-in user is an admin."""
+    """Allows an admin to delete an existing user."""
     if not require_admin(current_role, "delete a user"):
         return None
 
     username = input("Enter the username to delete: > ").strip()
 
     if username == "":
-        print_error("Username cannot be empty.")
+        print_errormsg("Username cannot be empty.")
         return None
 
     user = user_model.get_user(conn, username)
 
     if user is None:
-        print_error("User not found.")
+        print_errormsg("User not found.")
         return None
 
     user_role = user["role"] if "role" in user.keys() else "user"
-
+     
     if user_role == "admin" and count_admin_users(conn) <= 1:
-        print_error("You cannot delete the only admin account.")
-        print_warning("Create another admin account first, then try again.")
+        print_errormsg("You cannot delete the only admin account.")
+        print_warningmsg("Create another admin account first, then try again.")
         return None
 
     confirmation = input(
@@ -512,16 +525,16 @@ def delete_user(conn, current_role):
     ).strip().lower()
 
     if confirmation != "yes":
-        print_warning("Delete cancelled.")
+        print_warningmsg("Delete cancelled.")
         return None
 
     deleted = user_model.delete_user(conn, username)
 
     if deleted:
-        print_success("User deleted successfully.")
+        print_successmsg("User deleted successfully.")
         return username
 
-    print_error("User could not be deleted.")
+    print_errormsg("User could not be deleted.")
     return None
 
 
@@ -535,7 +548,7 @@ def migrate_csv_data(conn, current_role):
     ).strip().lower()
 
     if confirmation != "yes":
-        print_warning("CSV migration cancelled.")
+        print_warningmsg("CSV migration cancelled.")
         return
 
     try:
@@ -543,10 +556,10 @@ def migrate_csv_data(conn, current_role):
         metadatas.migrate_datasets_metadata(conn)
         it_tickets.migrate_it_tickets(conn)
 
-        print_success("CSV datasets successfully migrated into SQLite.")
+        print_successmsg("CSV datasets successfully migrated into SQLite.")
 
     except FileNotFoundError:
-        print_error("One or more CSV files were not found in the DATA folder.")
+        print_errormsg("One or more CSV files were not found in the DATA folder.")
 
 
 def preview_migrated_data(conn):
@@ -572,16 +585,16 @@ def preview_migrated_data(conn):
             display_dataframe(data, "IT Tickets Preview")
 
         else:
-            print_error("Invalid choice. Please enter 1, 2, or 3.")
+            print_errormsg("Invalid choice. Please enter 1, 2, or 3.")
 
     except Exception:
-        print_warning(
+        print_warningmsg(
             "The data has not been migrated yet. Please choose option 6 first."
         )
 
 
 def main():
-    """Display the menu and allow the user to use the SQLite-based system."""
+    """Check if Rich is installed and display the Menu if it is."""
     if not RICH_AVAILABLE:
         print("Please install Rich using: pip install rich")
         return
@@ -610,17 +623,17 @@ def main():
 
         elif choice == "2":
             if current_user is not None:
-                print_warning(f"You are already logged in as {current_user}.")
-                print_info("Please log out before logging in as another user.")
+                print_warningmsg(f"You are already logged in as {current_user}.")
+                print_infomsg("Please log out before logging in as another user.")
             else:
                 logged_in_user = login_user(conn)
 
                 if logged_in_user is not None:
                     current_user = logged_in_user
                     current_role = get_user_role(conn, current_user)
-                    print_success(f"Login successful! Role: {current_role}")
+                    print_successmsg(f"Login successful! Role: {current_role}")
                 else:
-                    print_error("Incorrect username or password.")
+                    print_errormsg("Incorrect username or password.")
 
         elif choice == "3":
             display_all_users(conn, current_role)
@@ -634,36 +647,36 @@ def main():
             if deleted_username is not None and deleted_username == current_user:
                 current_user = None
                 current_role = None
-                print_warning("Your account was deleted, so you have been logged out.")
+                print_warningmsg("Your account was deleted, so you have been logged out.")
 
         elif choice == "6":
             migrate_csv_data(conn, current_role)
 
         elif choice == "7":
             if current_user is None:
-                print_warning("Please log in before previewing migrated data.")
+                print_warningmsg("Please log in before previewing migrated data.")
             else:
                 preview_migrated_data(conn)
 
         elif choice == "8":
-            print_success("Goodbye!")
+            print_successmsg("Goodbye!")
             conn.close()
             break
 
         elif choice == "9":
             if current_user is None:
-                print_warning("No user is currently logged in.")
+                print_warningmsg("No user is currently logged in.")
             else:
                 confirmation = input(
                     "Are you sure you want to log out? yes/no: > "
                 ).strip().lower()
 
                 if confirmation == "yes":
-                    print_success(f"{current_user} has been logged out.")
+                    print_successmsg(f"{current_user} has been logged out.")
                     current_user = None
                     current_role = None
                 else:
-                    print_warning("Log out cancelled.")
+                    print_warningmsg("Log out cancelled.")
 
         elif choice == "10":
             setup_admin_account(conn, current_role)
@@ -672,7 +685,7 @@ def main():
             change_password(conn, current_user)
 
         else:
-            print_error("Invalid choice. Please enter a number from 1 to 11.")
+            print_errormsg("Invalid choice. Please enter a number from 1 to 11.")
 
 
 if __name__ == "__main__":
