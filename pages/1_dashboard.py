@@ -17,7 +17,6 @@ REQUIRED_INCIDENT_COLUMNS = {
     "category",
     "status",
 }
-PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 SEVERITY_ORDER = ["Critical", "High", "Medium", "Low"]
 CHART_HEIGHT = 270
 CHART_PADDING = {"left": 25, "right": 35, "top": 10, "bottom": 25}
@@ -582,11 +581,24 @@ ui.section_heading(
     "Browse the filtered SQLite records in manageable pages.",
 )
 
-page_size = st.selectbox(
+total_records = len(filtered_data)
+max_page_size = max(total_records, 1)
+default_page_size = min(20, max_page_size)
+current_page_size = int(
+    st.session_state.get("dashboard_records_per_page", default_page_size)
+)
+current_page_size = min(max(current_page_size, 1), max_page_size)
+
+page_size = st.number_input(
     "Records per page",
-    PAGE_SIZE_OPTIONS,
-    index=1,
-    key="dashboard_page_size",
+    min_value=1,
+    max_value=max_page_size,
+    value=current_page_size,
+    step=1,
+    format="%d",
+    help="Type how many incident records you want to show in the table.",
+    key="dashboard_records_per_page",
+    disabled=total_records == 0,
 )
 
 page_signature = f"{selected_severity}:{page_size}:{len(filtered_data)}"
@@ -595,14 +607,21 @@ if st.session_state.get("dashboard_page_signature") != page_signature:
     st.session_state["dashboard_page"] = 1
     st.session_state["dashboard_page_signature"] = page_signature
 
-total_records = len(filtered_data)
 total_pages = max(1, math.ceil(total_records / page_size))
-current_page = min(st.session_state.get("dashboard_page", 1), total_pages)
+current_page = int(st.session_state.get("dashboard_page", 1))
+current_page = min(max(current_page, 1), total_pages)
 st.session_state["dashboard_page"] = current_page
 
 start_index = (current_page - 1) * page_size
 end_index = min(start_index + page_size, total_records)
 page_data = filtered_data.iloc[start_index:end_index]
+
+ui.themed_dataframe(page_data)
+
+if total_records == 0:
+    st.caption("Showing 0 records. Try changing the dashboard filter.")
+else:
+    st.caption(f"Showing records {start_index + 1}-{end_index} of {total_records}")
 
 previous_column, page_column, next_column = st.columns([1, 3, 1])
 
@@ -618,6 +637,7 @@ with previous_column:
 
 with page_column:
     st.markdown(f"**Page {current_page} of {total_pages}**")
+    st.caption(f"{total_records} filtered records | {page_size} records per page")
 
 with next_column:
     if st.button(
@@ -628,9 +648,6 @@ with next_column:
     ):
         st.session_state["dashboard_page"] += 1
         st.rerun()
-
-st.caption(f"Showing records {start_index + 1}–{end_index} of {total_records}")
-ui.themed_dataframe(page_data)
 
 ui.section_heading(
     "Saved Results",
