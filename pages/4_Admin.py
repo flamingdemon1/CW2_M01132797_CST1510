@@ -1,10 +1,8 @@
 """Administrator monitoring and controlled account-management page."""
 
 import sqlite3
-
 import pandas as pd
 import streamlit as st
-
 from app_model import db, schema, ui, users
 from app_model.security import is_valid_email
 
@@ -92,8 +90,6 @@ def load_admin_monitoring_data():
                     "username": "Username",
                     "role": "Role",
                     "recovery_email_status": "Recovery email",
-                    "phone_status": "SMS phone",
-                    "two_factor_status": "SMS 2FA",
                     "created_at": "Created at",
                 }
             )
@@ -266,7 +262,7 @@ for column, (label, value, note, accent) in zip(overview_columns, overview_metri
 
 ui.section_heading(
     "User overview",
-    "Account roles, recovery readiness, and SMS 2FA status without sensitive details.",
+    "Account roles and recovery readiness without passwords or email addresses.",
 )
 
 if user_data.empty:
@@ -276,7 +272,7 @@ else:
 
 st.caption(
     "Admins can update roles and recovery emails, but password hashes, reset "
-    "codes, full phone numbers, and secrets are never displayed."
+    "codes, and secrets are never displayed."
 )
 
 if not user_data.empty:
@@ -412,6 +408,6 @@ ui.themed_dataframe(database_data, height=340)
 
 st.caption(
     "Monitoring tables are read-only. Password hashes, recovery codes, API keys, "
-    "secrets, full recovery email addresses, full phone numbers, and saved-result "
-    "content are never displayed."
+    "secrets, full recovery email addresses, and saved-result content are never "
+    "displayed."
 )

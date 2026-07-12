@@ -2,13 +2,11 @@
 
 import math
 import sqlite3
-
 import altair as alt
 import pandas as pd
 import streamlit as st
-
 from app_model import db, export_service, ui
-from app_model.logic import cyber_incidents
+from app_model.logic import cyber_incidents, cisa_kev
 
 
 REQUIRED_INCIDENT_COLUMNS = {
@@ -17,6 +15,16 @@ REQUIRED_INCIDENT_COLUMNS = {
     "category",
     "status",
 }
+CISA_TABLE_COLUMNS = [
+    "cveID",
+    "vendorProject",
+    "product",
+    "vulnerabilityName",
+    "dateAdded",
+    "dueDate",
+    "knownRansomwareCampaignUse",
+    "cwes",
+]
 SEVERITY_ORDER = ["Critical", "High", "Medium", "Low"]
 CHART_HEIGHT = 270
 CHART_PADDING = {"left": 25, "right": 35, "top": 10, "bottom": 25}
@@ -101,6 +109,28 @@ def load_cyber_incident_data():
     return data
 
 
+def load_cisa_kev_data():
+    """Load the external CISA KEV extension from its separate SQLite table."""
+    conn = db.get_connection()
+
+    try:
+        data = cisa_kev.get_all_cisa_kev(conn)
+    finally:
+        conn.close()
+
+    missing_columns = set(cisa_kev.EXPECTED_COLUMNS).difference(data.columns)
+
+    if missing_columns:
+        missing_names = ", ".join(sorted(missing_columns))
+        raise ValueError(f"Missing CISA KEV columns: {missing_names}")
+
+    data = data.copy()
+    data["dateAddedParsed"] = pd.to_datetime(data["dateAdded"], errors="coerce")
+    data["dueDateParsed"] = pd.to_datetime(data["dueDate"], errors="coerce")
+    data["yearAdded"] = data["dateAddedParsed"].dt.year
+    return data
+
+
 def style_chart(chart):
     """Apply readable colours for the selected Gatekeeper theme."""
     colours = ui.get_chart_colours()
@@ -129,6 +159,104 @@ def format_summary_counts(data, column_name):
     """Format one dashboard value-count series for saved text content."""
     counts = data[column_name].fillna("Unknown").value_counts()
     return ", ".join(f"{name}: {count}" for name, count in counts.items())
+
+
+def get_top_cwes(data, limit=10):
+    """Split the CISA CWE column and return the most common categories."""
+    if "cwes" not in data.columns:
+        return pd.DataFrame(columns=["CWE", "Vulnerabilities"])
+
+    cwe_values = []
+
+    for cwe_text in data["cwes"].fillna("").astype(str):
+        for cwe in cwe_text.split(","):
+            clean_cwe = cwe.strip()
+
+            if clean_cwe:
+                cwe_values.append(clean_cwe)
+
+    if not cwe_values:
+        return pd.DataFrame(columns=["CWE", "Vulnerabilities"])
+
+    return (
+        pd.Series(cwe_values)
+        .value_counts()
+        .head(limit)
+        .rename_axis("CWE")
+        .reset_index(name="Vulnerabilities")
+    )
+
+
+def paginate_dataframe(data, state_prefix, default_page_size=20):
+    """Return the current page of a DataFrame and display table controls."""
+    total_records = len(data)
+    max_page_size = max(total_records, 1)
+    current_page_size = int(
+        st.session_state.get(f"{state_prefix}_records_per_page", default_page_size)
+    )
+    current_page_size = min(max(current_page_size, 1), max_page_size)
+
+    page_size = st.number_input(
+        "Records per page",
+        min_value=1,
+        max_value=max_page_size,
+        value=current_page_size,
+        step=1,
+        format="%d",
+        key=f"{state_prefix}_records_per_page",
+        disabled=total_records == 0,
+    )
+    page_signature = f"{state_prefix}:{page_size}:{total_records}"
+
+    if st.session_state.get(f"{state_prefix}_page_signature") != page_signature:
+        st.session_state[f"{state_prefix}_page"] = 1
+        st.session_state[f"{state_prefix}_page_signature"] = page_signature
+
+    total_pages = max(1, math.ceil(total_records / page_size))
+    current_page = int(st.session_state.get(f"{state_prefix}_page", 1))
+    current_page = min(max(current_page, 1), total_pages)
+    st.session_state[f"{state_prefix}_page"] = current_page
+
+    start_index = (current_page - 1) * page_size
+    end_index = min(start_index + page_size, total_records)
+    page_data = data.iloc[start_index:end_index]
+
+    ui.themed_dataframe(page_data, height=380)
+
+    if total_records == 0:
+        st.caption("Showing 0 records. Try changing the filters.")
+    else:
+        st.caption(f"Showing records {start_index + 1}-{end_index} of {total_records}")
+
+    previous_column, page_column, next_column = st.columns([1, 3, 1])
+
+    with previous_column:
+        if st.button(
+            "Previous",
+            icon=":material/chevron_left:",
+            disabled=current_page == 1,
+            width="stretch",
+            key=f"{state_prefix}_previous",
+        ):
+            st.session_state[f"{state_prefix}_page"] -= 1
+            st.rerun()
+
+    with page_column:
+        st.markdown(f"**Page {current_page} of {total_pages}**")
+        st.caption(f"{total_records} filtered records | {page_size} records per page")
+
+    with next_column:
+        if st.button(
+            "Next",
+            icon=":material/chevron_right:",
+            disabled=current_page == total_pages,
+            width="stretch",
+            key=f"{state_prefix}_next",
+        ):
+            st.session_state[f"{state_prefix}_page"] += 1
+            st.rerun()
+
+    return page_data
 
 
 def create_dashboard_summary(data, severity_filter):
@@ -581,73 +709,7 @@ ui.section_heading(
     "Browse the filtered SQLite records in manageable pages.",
 )
 
-total_records = len(filtered_data)
-max_page_size = max(total_records, 1)
-default_page_size = min(20, max_page_size)
-current_page_size = int(
-    st.session_state.get("dashboard_records_per_page", default_page_size)
-)
-current_page_size = min(max(current_page_size, 1), max_page_size)
-
-page_size = st.number_input(
-    "Records per page",
-    min_value=1,
-    max_value=max_page_size,
-    value=current_page_size,
-    step=1,
-    format="%d",
-    help="Type how many incident records you want to show in the table.",
-    key="dashboard_records_per_page",
-    disabled=total_records == 0,
-)
-
-page_signature = f"{selected_severity}:{page_size}:{len(filtered_data)}"
-
-if st.session_state.get("dashboard_page_signature") != page_signature:
-    st.session_state["dashboard_page"] = 1
-    st.session_state["dashboard_page_signature"] = page_signature
-
-total_pages = max(1, math.ceil(total_records / page_size))
-current_page = int(st.session_state.get("dashboard_page", 1))
-current_page = min(max(current_page, 1), total_pages)
-st.session_state["dashboard_page"] = current_page
-
-start_index = (current_page - 1) * page_size
-end_index = min(start_index + page_size, total_records)
-page_data = filtered_data.iloc[start_index:end_index]
-
-ui.themed_dataframe(page_data)
-
-if total_records == 0:
-    st.caption("Showing 0 records. Try changing the dashboard filter.")
-else:
-    st.caption(f"Showing records {start_index + 1}-{end_index} of {total_records}")
-
-previous_column, page_column, next_column = st.columns([1, 3, 1])
-
-with previous_column:
-    if st.button(
-        "Previous",
-        icon=":material/chevron_left:",
-        disabled=current_page == 1,
-        width="stretch",
-    ):
-        st.session_state["dashboard_page"] -= 1
-        st.rerun()
-
-with page_column:
-    st.markdown(f"**Page {current_page} of {total_pages}**")
-    st.caption(f"{total_records} filtered records | {page_size} records per page")
-
-with next_column:
-    if st.button(
-        "Next",
-        icon=":material/chevron_right:",
-        disabled=current_page == total_pages,
-        width="stretch",
-    ):
-        st.session_state["dashboard_page"] += 1
-        st.rerun()
+paginate_dataframe(filtered_data, "dashboard", default_page_size=20)
 
 ui.section_heading(
     "Saved Results",
@@ -710,6 +772,324 @@ except (sqlite3.Error, OSError):
 except Exception as error:
     st.error("Saved results could not be displayed.")
     st.caption(f"Technical detail: {type(error).__name__}")
+
+
+ui.section_heading(
+    "External Threat Intelligence - CISA KEV",
+    "Official real-world exploited-vulnerability data from CISA.",
+)
+st.caption("Source: CISA Known Exploited Vulnerabilities Catalog.")
+
+try:
+    cisa_data = load_cisa_kev_data()
+except Exception as error:
+    cisa_data = pd.DataFrame()
+    st.info(
+        "CISA KEV data is not available yet. Use the CLI migration option to "
+        "migrate DATA/external/known_exploited_vulnerabilities.csv into SQLite."
+    )
+    st.caption(f"Technical detail: {type(error).__name__}")
+
+if not cisa_data.empty:
+    cisa_filter_columns = st.columns(5)
+
+    with cisa_filter_columns[0]:
+        vendor_options = sorted(
+            cisa_data["vendorProject"].replace("", pd.NA).dropna().unique().tolist()
+        )
+        selected_vendor = st.selectbox(
+            "CISA vendor",
+            ["All"] + vendor_options,
+            key="cisa_vendor_filter",
+        )
+
+    with cisa_filter_columns[1]:
+        ransomware_options = sorted(
+            cisa_data["knownRansomwareCampaignUse"]
+            .replace("", "Unknown")
+            .fillna("Unknown")
+            .unique()
+            .tolist()
+        )
+        selected_ransomware = st.selectbox(
+            "Ransomware usage",
+            ["All"] + ransomware_options,
+            key="cisa_ransomware_filter",
+        )
+
+    with cisa_filter_columns[2]:
+        year_options = sorted(
+            int(year) for year in cisa_data["yearAdded"].dropna().unique().tolist()
+        )
+        selected_year = st.selectbox(
+            "Year added",
+            ["All"] + year_options,
+            key="cisa_year_filter",
+        )
+
+    with cisa_filter_columns[3]:
+        cwe_options = get_top_cwes(cisa_data, limit=50)["CWE"].tolist()
+        selected_cwe = st.selectbox(
+            "CWE category",
+            ["All"] + cwe_options,
+            key="cisa_cwe_filter",
+        )
+
+    with cisa_filter_columns[4]:
+        cisa_search = st.text_input(
+            "Search CVE, vendor, or product",
+            key="cisa_search_filter",
+            placeholder="Example: CVE-2024 or Microsoft",
+        ).strip()
+
+    filtered_cisa = cisa_data.copy()
+
+    if selected_vendor != "All":
+        filtered_cisa = filtered_cisa[
+            filtered_cisa["vendorProject"].astype(str) == selected_vendor
+        ]
+
+    if selected_ransomware != "All":
+        filtered_cisa = filtered_cisa[
+            filtered_cisa["knownRansomwareCampaignUse"]
+            .replace("", "Unknown")
+            .fillna("Unknown")
+            .astype(str)
+            == selected_ransomware
+        ]
+
+    if selected_year != "All":
+        filtered_cisa = filtered_cisa[filtered_cisa["yearAdded"] == selected_year]
+
+    if selected_cwe != "All":
+        filtered_cisa = filtered_cisa[
+            filtered_cisa["cwes"].fillna("").astype(str).str.contains(
+                selected_cwe,
+                na=False,
+                regex=False,
+            )
+        ]
+
+    if cisa_search:
+        search_text = cisa_search.lower()
+        searchable_text = (
+            filtered_cisa["cveID"].fillna("")
+            + " "
+            + filtered_cisa["vendorProject"].fillna("")
+            + " "
+            + filtered_cisa["product"].fillna("")
+            + " "
+            + filtered_cisa["vulnerabilityName"].fillna("")
+        ).str.lower()
+        filtered_cisa = filtered_cisa[
+            searchable_text.str.contains(search_text, na=False, regex=False)
+        ]
+
+    if filtered_cisa.empty:
+        st.warning("No CISA KEV records match the selected filters.")
+    else:
+        cisa_metric_columns = st.columns(4)
+        cisa_dates = filtered_cisa["dateAddedParsed"].dropna()
+        latest_cisa_date = cisa_dates.max() if not cisa_dates.empty else pd.NaT
+        latest_30_days = (
+            int((cisa_dates >= latest_cisa_date - pd.Timedelta(days=30)).sum())
+            if not pd.isna(latest_cisa_date)
+            else 0
+        )
+        ransomware_known = int(
+            filtered_cisa["knownRansomwareCampaignUse"]
+            .fillna("")
+            .str.lower()
+            .eq("known")
+            .sum()
+        )
+
+        with cisa_metric_columns[0]:
+            ui.metric_card(
+                "Known exploited vulnerabilities",
+                len(filtered_cisa),
+                note="Filtered CISA KEV rows",
+                accent="red",
+            )
+
+        with cisa_metric_columns[1]:
+            ui.metric_card(
+                "Vendors represented",
+                filtered_cisa["vendorProject"].replace("", pd.NA).nunique(),
+                note="Unique vendor/project values",
+                accent="blue",
+            )
+
+        with cisa_metric_columns[2]:
+            ui.metric_card(
+                "Known ransomware links",
+                ransomware_known,
+                note="Rows marked Known",
+                accent="amber",
+            )
+
+        with cisa_metric_columns[3]:
+            ui.metric_card(
+                "Latest 30-day additions",
+                latest_30_days,
+                note="Based on latest date added",
+                accent="green",
+            )
+
+        top_vendors = (
+            filtered_cisa["vendorProject"]
+            .replace("", "Unknown")
+            .fillna("Unknown")
+            .value_counts()
+            .head(10)
+            .rename_axis("Vendor")
+            .reset_index(name="Vulnerabilities")
+        )
+        vendor_chart = (
+            alt.Chart(top_vendors)
+            .mark_bar(color="#dc2626", cornerRadiusEnd=3)
+            .encode(
+                y=alt.Y("Vendor:N", sort="-x", title="Vendor/project"),
+                x=alt.X("Vulnerabilities:Q", title="CISA KEV count"),
+                tooltip=["Vendor:N", "Vulnerabilities:Q"],
+            )
+            .properties(height=CHART_HEIGHT, padding=CHART_PADDING)
+        )
+
+        monthly_data = filtered_cisa.dropna(subset=["dateAddedParsed"]).copy()
+        monthly_chart = None
+
+        if not monthly_data.empty:
+            monthly_data["Month"] = (
+                monthly_data["dateAddedParsed"].dt.to_period("M").dt.to_timestamp()
+            )
+            monthly_counts = (
+                monthly_data.groupby("Month").size().reset_index(name="Vulnerabilities")
+            )
+            monthly_chart = (
+                alt.Chart(monthly_counts)
+                .mark_line(point=True, color="#2563eb", strokeWidth=2)
+                .encode(
+                    x=alt.X("Month:T", title="Month added"),
+                    y=alt.Y("Vulnerabilities:Q", title="Vulnerabilities added"),
+                    tooltip=[
+                        alt.Tooltip("Month:T", title="Month", format="%b %Y"),
+                        alt.Tooltip("Vulnerabilities:Q", title="Added"),
+                    ],
+                )
+                .properties(height=CHART_HEIGHT, padding=CHART_PADDING)
+            )
+
+        ransomware_counts = (
+            filtered_cisa["knownRansomwareCampaignUse"]
+            .replace("", "Unknown")
+            .fillna("Unknown")
+            .value_counts()
+            .rename_axis("Ransomware usage")
+            .reset_index(name="Vulnerabilities")
+        )
+        ransomware_chart = (
+            alt.Chart(ransomware_counts)
+            .mark_bar(color="#d97706", cornerRadiusEnd=3)
+            .encode(
+                y=alt.Y("Ransomware usage:N", sort="-x", title="Ransomware usage"),
+                x=alt.X("Vulnerabilities:Q", title="CISA KEV count"),
+                tooltip=["Ransomware usage:N", "Vulnerabilities:Q"],
+            )
+            .properties(height=CHART_HEIGHT, padding=CHART_PADDING)
+        )
+
+        cwe_counts = get_top_cwes(filtered_cisa)
+        cwe_chart = None
+
+        if not cwe_counts.empty:
+            cwe_chart = (
+                alt.Chart(cwe_counts)
+                .mark_bar(color="#0891b2", cornerRadiusEnd=3)
+                .encode(
+                    y=alt.Y("CWE:N", sort="-x", title="CWE category"),
+                    x=alt.X("Vulnerabilities:Q", title="CISA KEV count"),
+                    tooltip=["CWE:N", "Vulnerabilities:Q"],
+                )
+                .properties(height=CHART_HEIGHT, padding=CHART_PADDING)
+            )
+
+        cisa_charts = [
+            (
+                "Top 10 vendors by known exploited vulnerabilities",
+                "Ranks vendors/projects by count in the filtered CISA KEV data.",
+                vendor_chart,
+            ),
+            (
+                "Vulnerabilities added over time",
+                "Groups CISA KEV additions by month.",
+                monthly_chart,
+            ),
+            (
+                "Known ransomware campaign usage",
+                "Compares whether vulnerabilities are linked to known ransomware use.",
+                ransomware_chart,
+            ),
+            (
+                "Top CWE categories",
+                "Shows common weakness categories where CWE values are available.",
+                cwe_chart,
+            ),
+        ]
+
+        for row_start in range(0, len(cisa_charts), 2):
+            chart_pair = cisa_charts[row_start : row_start + 2]
+            chart_columns = st.columns(len(chart_pair))
+
+            for chart_column, (title, caption, chart) in zip(chart_columns, chart_pair):
+                with chart_column:
+                    with st.container(border=True):
+                        st.subheader(title)
+                        st.caption(caption)
+
+                        if chart is None:
+                            st.info("Not enough usable data is available for this chart.")
+                        else:
+                            st.altair_chart(style_chart(chart), width="stretch")
+
+        ui.section_heading(
+            "CISA KEV records",
+            "Paginated external threat-intelligence rows from the filtered CISA data.",
+        )
+        cisa_table = filtered_cisa[CISA_TABLE_COLUMNS].rename(
+            columns={
+                "cveID": "CVE ID",
+                "vendorProject": "Vendor",
+                "product": "Product",
+                "vulnerabilityName": "Vulnerability",
+                "dateAdded": "Date added",
+                "dueDate": "Due date",
+                "knownRansomwareCampaignUse": "Ransomware usage",
+                "cwes": "CWE",
+            }
+        )
+        paginate_dataframe(cisa_table, "cisa_kev", default_page_size=20)
+
+        selected_cve = st.selectbox(
+            "View full CISA record",
+            [None] + filtered_cisa["cveID"].dropna().astype(str).tolist(),
+            format_func=lambda value: "Select a CVE" if value is None else value,
+        )
+
+        if selected_cve is not None:
+            selected_record = filtered_cisa[
+                filtered_cisa["cveID"].astype(str) == selected_cve
+            ].iloc[0]
+
+            with st.expander(f"{selected_cve} details", expanded=True):
+                st.markdown(
+                    f"**Vendor/Product:** {selected_record['vendorProject']} - "
+                    f"{selected_record['product']}"
+                )
+                st.markdown(f"**Vulnerability:** {selected_record['vulnerabilityName']}")
+                st.markdown(f"**Description:** {selected_record['shortDescription']}")
+                st.markdown(f"**Required action:** {selected_record['requiredAction']}")
+                st.markdown(f"**Notes:** {selected_record['notes'] or 'No notes provided.'}")
 
 ui.section_heading("Operational insight")
 ui.section_card(

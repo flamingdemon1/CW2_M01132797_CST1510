@@ -2,7 +2,7 @@ import sqlite3
 from getpass import getpass
 import bcrypt
 from app_model import db, schema, users as user_model
-from app_model.logic import cyber_incidents, metadatas, it_tickets
+from app_model.logic import cyber_incidents, metadatas, it_tickets, cisa_kev
 
 
 # AI assistance was used for SQLite and CSV migration improvements,
@@ -555,11 +555,14 @@ def migrate_csv_data(conn, current_role):
         cyber_incidents.migrate_cyber_incidents(conn)
         metadatas.migrate_datasets_metadata(conn)
         it_tickets.migrate_it_tickets(conn)
+        cisa_kev.migrate_cisa_kev(conn)
 
         print_successmsg("CSV datasets successfully migrated into SQLite.")
 
     except FileNotFoundError:
         print_errormsg("One or more CSV files were not found in the DATA folder.")
+    except ValueError as error:
+        print_errormsg(f"CSV migration failed: {error}")
 
 
 def preview_migrated_data(conn):
@@ -568,6 +571,7 @@ def preview_migrated_data(conn):
     console.print("[cyan]1.[/cyan] Cyber incidents")
     console.print("[cyan]2.[/cyan] Datasets metadata")
     console.print("[cyan]3.[/cyan] IT tickets")
+    console.print("[cyan]4.[/cyan] CISA known exploited vulnerabilities")
 
     choice = input(": > ").strip()
 
@@ -584,8 +588,12 @@ def preview_migrated_data(conn):
             data = it_tickets.get_all_it_tickets(conn)
             display_dataframe(data, "IT Tickets Preview")
 
+        elif choice == "4":
+            data = cisa_kev.get_all_cisa_kev(conn)
+            display_dataframe(data, "CISA KEV Preview")
+
         else:
-            print_errormsg("Invalid choice. Please enter 1, 2, or 3.")
+            print_errormsg("Invalid choice. Please enter 1, 2, 3, or 4.")
 
     except Exception:
         print_warningmsg(

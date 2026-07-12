@@ -60,6 +60,7 @@ app_model/recovery.py           Reset-code generation and password recovery
 app_model/export_service.py     Text, CSV, and SQLite result saving
 app_model/logic/                Dataset migration and query modules
 DATA/                           Required CSV files and local SQLite database
+DATA/external/                  External threat-intelligence CSV extension
 assets/logos/                   Gatekeeper, Dashboard, and SmartBoyAI logos
 .streamlit/config.toml          Streamlit interface configuration
 ```
@@ -222,6 +223,7 @@ and Streamlit application reads project data and creates safe context such as:
 - IT-ticket priority and status counts.
 - Resolution-time information when available.
 - Dataset metadata summaries.
+- Bounded CISA KEV summaries and a small number of matching CVE rows.
 - Limited matching dashboard rows when needed for a specific question.
 
 This context is passed privately to Groq with the conversation history. The
@@ -232,6 +234,8 @@ SmartBoyAI does not receive passwords, password hashes, API keys, or full raw
 user-account tables. It refuses clearly unrelated requests such as recipes,
 jokes, food, and football, while allowing questions and follow-ups about the
 dashboard, cybersecurity, IT tickets, datasets, and the project database.
+It can also answer relevant CISA KEV, CVE, vendor, ransomware, and CWE
+questions using bounded context rather than the full external CSV.
 
 ## SendGrid Password Recovery
 
@@ -299,6 +303,32 @@ table pagination does not change the saved totals. Users can select which of the
 four dashboard visualisations are displayed without removing any chart.
 The visualisations follow standard data-visualisation principles: clear titles,
 labelled axes, appropriate chart types, consistent colours, and reduced clutter.
+
+## External CISA KEV Dataset
+
+Gatekeeper includes one final external-data extension using the official CISA
+Known Exploited Vulnerabilities Catalog. The local CSV is stored at:
+
+```text
+DATA/external/known_exploited_vulnerabilities.csv
+```
+
+The source organisation is the Cybersecurity and Infrastructure Security Agency
+(CISA). The catalogue source page is:
+
+```text
+https://www.cisa.gov/known-exploited-vulnerabilities-catalog
+```
+
+This CSV is real public threat-intelligence data, not AI-generated data. It is
+an additional extension and does not replace or alter the required coursework
+CSV files. The local copy was downloaded on 12 July 2026 and does not update
+automatically.
+
+Admin users migrate it with the normal CLI migration option. It is stored in a
+separate SQLite table called `cisa_known_exploited_vulnerabilities`, not in
+`cyber_incidents`. The dashboard shows a separate CISA KEV section with metrics,
+filters, standard charts, a paginated CVE table, and a full-detail CVE expander.
 
 ## Admin Monitoring
 

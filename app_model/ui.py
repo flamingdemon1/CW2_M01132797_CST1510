@@ -2,9 +2,10 @@
 
 from html import escape
 from pathlib import Path
-
 import streamlit as st
 
+# AI assistance was used for Streamlit UI styling, theme CSS refinements,
+# layout polish, and debugging. This file only controls presentation.
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 GATEKEEPER_LOGO = PROJECT_ROOT / "assets" / "logos" / "gatekeeper_logo.png"
@@ -96,8 +97,9 @@ def apply_theme():
     """Apply presentation-only CSS for the selected Gatekeeper theme."""
     palette = THEMES[get_theme()]
 
-    # This CSS changes presentation only. Authentication, database, email and
-    # AI behaviour remain in Python and use normal Streamlit widgets.
+    #This CSS changes presentation only. Authentication, database, email and
+    #AI behaviour remain in Python and use normal Streamlit widgets.
+    #I assigned the colours to the variables in the CSS file to make it easier to change the colours in one place.
     css = f"""
     <style>
         :root {{
@@ -617,21 +619,10 @@ def logout():
     """Clear the shared authenticated session."""
     st.session_state["logged_in"] = False
     st.session_state["username"] = ""
-    st.session_state["role"] = ""
-
-    for key in [
-        "pending_2fa_username",
-        "pending_2fa_role",
-        "pending_2fa_phone",
-        "pending_2fa_started",
-        "pending_2fa_last_sent",
-        "profile_pending_2fa_phone",
-    ]:
-        st.session_state.pop(key, None)
 
 
 def sidebar_logo(logo_path=None):
-    """Place the current page logo in Streamlit's standard sidebar area."""
+    """Place the current page logo in Streamlit's standard sidebar ."""
     selected_logo = Path(logo_path) if logo_path else GATEKEEPER_LOGO
 
     if not selected_logo.is_absolute():
@@ -770,7 +761,7 @@ def page_header(
     logo_alt="Gatekeeper logo",
 ):
     """Display a consistent page heading beneath the shared top bar."""
-    del logo_path, logo_text, logo_alt  # Logos now belong in the shared top bar.
+    del logo_path, logo_text, logo_alt  
     dark_colour, light_colour = STATUS_STYLES.get(
         status_accent,
         STATUS_STYLES["green"],

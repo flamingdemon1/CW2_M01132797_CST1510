@@ -1,10 +1,11 @@
 import os
-
 import pandas as pd
 import streamlit as st
 from app_model import db, ui
-from app_model.logic import cyber_incidents, it_tickets, metadatas
+from app_model.logic import cyber_incidents, it_tickets, metadatas, cisa_kev
 
+# AI assistance was used for the Groq integration, system prompt design,
+# scope restrictions, database context construction, refactoring, and debugging.
 
 GROQ_KEY_PLACEHOLDERS = {
     "put_your_groq_api_key_here",
@@ -13,8 +14,8 @@ GROQ_KEY_PLACEHOLDERS = {
 
 SCOPE_REFUSAL = (
     "I can only help with the Gatekeeper cybersecurity dashboard, incidents, "
-    "IT tickets, dataset metadata and related IT/cybersecurity support. Please "
-    "ask a question related to those areas."
+    "IT tickets, dataset metadata, CISA KEV records, CVEs, and related "
+    "IT/cybersecurity support. Please ask a question related to those areas."
 )
 
 ALLOWED_SCOPE_TERMS = {
@@ -39,6 +40,18 @@ ALLOWED_SCOPE_TERMS = {
     "risk",
     "threat",
     "vulnerability",
+    "vulnerabilities",
+    "cisa",
+    "kev",
+    "cve",
+    "cwe",
+    "ransomware",
+    "remediation",
+    "vendor",
+    "vendors",
+    "microsoft",
+    "attacked",
+    "exploited",
     "network",
     "password",
     "authentication",
@@ -195,6 +208,22 @@ def format_counts(data, column_name):
     return "\n".join(count_lines)
 
 
+def format_top_counts(data, column_name, limit=10):
+    """Turn the most common values in one column into simple text."""
+    if column_name not in data.columns:
+        return "Column not found."
+
+    counts = data[column_name].replace("", "Unknown").fillna("Unknown").value_counts()
+
+    if counts.empty:
+        return "No records found."
+
+    return "\n".join(
+        f"- {name}: {count}"
+        for name, count in counts.head(limit).items()
+    )
+
+
 def get_average_resolution_time(ticket_data):
     """Return the average IT ticket resolution time if the column is available."""
     if "resolution_time_hours" not in ticket_data.columns:
@@ -232,14 +261,19 @@ def load_project_data():
             "datasets_metadata",
             metadatas.get_all_datasets_metadata
         )
+        cisa_data, missing_cisa = load_table(
+            conn,
+            "cisa_known_exploited_vulnerabilities",
+            cisa_kev.get_all_cisa_kev
+        )
     finally:
         conn.close()
 
-    for table_name in [missing_cyber, missing_tickets, missing_metadata]:
+    for table_name in [missing_cyber, missing_tickets, missing_metadata, missing_cisa]:
         if table_name is not None:
             missing_tables.append(table_name)
 
-    return cyber_data, ticket_data, metadata_data, missing_tables
+    return cyber_data, ticket_data, metadata_data, cisa_data, missing_tables
 
 
 def format_rows(data, columns, max_rows=80):
@@ -283,9 +317,143 @@ def add_matching_rows(summary_parts, data, column_name, question, title, columns
             ])
 
 
+def add_cisa_context(summary_parts, cisa_data, question):
+    """Add bounded CISA KEV summaries and a small number of relevant rows."""
+    if cisa_data.empty:
+        return
+
+    summary_parts.extend([
+        "",
+        "External CISA Known Exploited Vulnerabilities summary:",
+        "Important CISA interpretation rule: the KEV catalogue records known "
+        "exploited vulnerability entries. It does not measure confirmed attack "
+        "frequency against a company. If the user asks who was 'most attacked', "
+        "answer using the vendor/project that appears most often in KEV entries "
+        "and clearly explain that this is not the same as being attacked most.",
+        f"- Total vulnerabilities: {len(cisa_data)}",
+        "- Top vendors/projects:",
+        format_top_counts(cisa_data, "vendorProject", limit=10),
+        "- Known ransomware campaign usage:",
+        format_counts(cisa_data, "knownRansomwareCampaignUse"),
+    ])
+
+    if "cwes" in cisa_data.columns:
+        cwe_values = []
+
+        for cwe_text in cisa_data["cwes"].fillna("").astype(str):
+            for cwe in cwe_text.split(","):
+                clean_cwe = cwe.strip()
+
+                if clean_cwe:
+                    cwe_values.append(clean_cwe)
+
+        if cwe_values:
+            cwe_counts = pd.Series(cwe_values).value_counts().head(10)
+            summary_parts.extend([
+                "- Top CWE categories:",
+                "\n".join(f"- {name}: {count}" for name, count in cwe_counts.items()),
+            ])
+
+    question_lower = question.lower()
+    matching_cisa = pd.DataFrame()
+
+    cve_terms = [
+        word.strip(".,:;!?()[]{}")
+        for word in question.split()
+        if word.upper().startswith("CVE-")
+    ]
+
+    if cve_terms and "cveID" in cisa_data.columns:
+        matching_cisa = cisa_data[
+            cisa_data["cveID"].str.upper().isin(
+                [term.upper() for term in cve_terms]
+            )
+        ]
+
+    if matching_cisa.empty and any(
+        term in question_lower
+        for term in ["latest", "recent", "newest", "added"]
+    ):
+        dated_cisa = cisa_data.copy()
+        dated_cisa["dateAddedParsed"] = pd.to_datetime(
+            dated_cisa["dateAdded"],
+            errors="coerce"
+        )
+        matching_cisa = dated_cisa.sort_values(
+            "dateAddedParsed",
+            ascending=False
+        ).head(10)
+
+    if matching_cisa.empty:
+        for column in ["vendorProject", "product", "knownRansomwareCampaignUse", "cwes"]:
+            if column not in cisa_data.columns:
+                continue
+
+            values = cisa_data[column].dropna().astype(str).unique()
+
+            for value in values:
+                if value and value.lower() in question_lower:
+                    matching_cisa = cisa_data[
+                        cisa_data[column].astype(str).str.lower() == value.lower()
+                    ].head(10)
+                    break
+
+            if not matching_cisa.empty:
+                break
+
+    if matching_cisa.empty and any(
+        term in question_lower
+        for term in ["most attacked", "most exploited", "most common", "most affected"]
+    ):
+        top_vendor_counts = (
+            cisa_data["vendorProject"]
+            .replace("", "Unknown")
+            .fillna("Unknown")
+            .value_counts()
+            .head(5)
+        )
+        summary_parts.extend([
+            "",
+            "Top CISA KEV vendor/project entry counts:",
+            "\n".join(
+                f"- {vendor}: {count}"
+                for vendor, count in top_vendor_counts.items()
+            ),
+            "For 'most attacked' wording, explain this means most KEV entries, "
+            "not proven attack frequency.",
+        ])
+        matching_cisa = cisa_data[
+            cisa_data["vendorProject"].astype(str).isin(
+                cisa_data["vendorProject"].value_counts().head(3).index
+            )
+        ].head(10)
+
+    if not matching_cisa.empty:
+        summary_parts.extend([
+            "",
+            "Question-relevant CISA KEV rows:",
+            format_rows(
+                matching_cisa,
+                [
+                    "cveID",
+                    "vendorProject",
+                    "product",
+                    "vulnerabilityName",
+                    "dateAdded",
+                    "dueDate",
+                    "knownRansomwareCampaignUse",
+                    "requiredAction",
+                    "notes",
+                    "cwes",
+                ],
+                max_rows=10,
+            ),
+        ])
+
+
 def create_database_context(question):
     """Create hidden, question-focused database context for SmartBoyAI."""
-    cyber_data, ticket_data, metadata_data, missing_tables = load_project_data()
+    cyber_data, ticket_data, metadata_data, cisa_data, missing_tables = load_project_data()
 
     summary_parts = [
         "Hidden project database context for SmartBoyAI:",
@@ -423,6 +591,10 @@ def create_database_context(question):
                 )
             ])
 
+    if not cisa_data.empty:
+        available_data_found = True
+        add_cisa_context(summary_parts, cisa_data, question)
+
     if missing_tables:
         summary_parts.extend([
             "",
@@ -460,15 +632,22 @@ def ask_smartboyai(message_history, api_key, database_context):
             "assistant for a first-year computer science coursework project. "
             "Only answer questions about Gatekeeper, its dashboard and project "
             "database, cyber incidents, IT tickets, dataset metadata, "
-            "cybersecurity, or IT support. For every unrelated request, reply "
-            f"with exactly: {SCOPE_REFUSAL} Do not add an unrelated answer. "
+            "CISA known exploited vulnerabilities, CVEs, cybersecurity, or IT "
+            "support. For every unrelated request, reply "
+            f"with exactly: {SCOPE_REFUSAL} Do not add an unrelated answer or "
+            "continue with internal incident data after refusing. "
             "Use the previous conversation messages when the user asks a vague "
             "follow-up such as 'why?', 'explain that', or 'what does this mean?'. "
             "If a vague request has no useful earlier context, ask the user to "
             "clarify which Gatekeeper, cybersecurity, database, or IT support "
             "topic they need help with. "
             "Keep answers clear, safe, and beginner-friendly. Help users "
-            "understand cyber incidents, IT tickets, and dataset questions. "
+            "understand cyber incidents, IT tickets, dataset questions, and "
+            "CISA KEV threat-intelligence questions. "
+            "For CISA KEV questions, never describe a top vendor as the most "
+            "attacked. If the user asks who was most attacked, explain that "
+            "the data shows which vendor/project appears most often in KEV "
+            "entries, not confirmed attack frequency. "
             "Use the hidden database context below when answering questions "
             "about the current dashboard or project data. If matching dashboard "
             "rows are included, use them to give specific answers. Do not "
