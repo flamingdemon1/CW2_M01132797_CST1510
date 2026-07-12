@@ -1,8 +1,9 @@
 """Gatekeeper Streamlit entry page and account access flow."""
 
 import sqlite3
+import time
 import streamlit as st
-from app_model import db, schema, ui, users
+from app_model import db, schema, twilio_service, ui, users
 from app_model.email_service import (
     is_local_reset_fallback_enabled,
     is_sendgrid_configured,
@@ -21,6 +22,16 @@ from app_model.security import (
 from main import generate_hash, get_username_errors, is_valid_hash
 
 
+TWO_FACTOR_RESEND_SECONDS = 30
+PENDING_2FA_KEYS = [
+    "pending_2fa_username",
+    "pending_2fa_role",
+    "pending_2fa_phone",
+    "pending_2fa_started",
+    "pending_2fa_last_sent",
+]
+
+
 st.set_page_config(
     page_title="Gatekeeper Home",
     page_icon="assets/logos/gatekeeper_logo.png",
@@ -33,6 +44,7 @@ for key, default_value in {
     "username": "",
     "auth_view": "login",
     "recovery_step": 1,
+    "role": "",
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default_value
@@ -46,6 +58,9 @@ def show_auth_view(view_name):
     """Switch the account panel """
     current_view = st.session_state.get("auth_view", "login")
 
+    if current_view == "two_factor" and view_name != "two_factor":
+        clear_pending_two_factor()
+
     if current_view == "recovery" and view_name != "recovery":
         clear_reset_request()
 
@@ -57,6 +72,38 @@ def show_auth_view(view_name):
 
     st.session_state["auth_view"] = view_name
     st.rerun()
+
+
+def clear_pending_two_factor():
+    """Clear temporary SMS verification state from the current browser session."""
+    for key in PENDING_2FA_KEYS:
+        st.session_state.pop(key, None)
+
+
+def complete_streamlit_login(username, role):
+    """Mark a Streamlit user as fully authenticated."""
+    clear_pending_two_factor()
+    st.session_state["logged_in"] = True
+    st.session_state["username"] = username
+    st.session_state["role"] = role or "user"
+
+
+def start_two_factor_login(username, role, phone_number):
+    """Send the SMS code and store only minimal pending-login state."""
+    code_sent, code_message = twilio_service.send_two_factor_code(phone_number)
+
+    if not code_sent:
+        clear_pending_two_factor()
+        return False, code_message
+
+    now = time.time()
+    st.session_state["pending_2fa_username"] = username
+    st.session_state["pending_2fa_role"] = role or "user"
+    st.session_state["pending_2fa_phone"] = phone_number
+    st.session_state["pending_2fa_started"] = now
+    st.session_state["pending_2fa_last_sent"] = now
+    st.session_state["auth_view"] = "two_factor"
+    return True, code_message
 
 
 def register_streamlit_user(username, password, email=""):
@@ -106,7 +153,7 @@ def login_streamlit_user(username, password):
     username = username.strip()
 
     if username == "" or password == "":
-        return False, "Please enter both a username and a password."
+        return False, "Please enter both a username and a password.", "error"
 
     try:
         conn = db.get_connection()
@@ -117,14 +164,37 @@ def login_streamlit_user(username, password):
         finally:
             conn.close()
     except Exception:
-        return False, "Login is temporarily unavailable. Please try again."
+        return False, "Login is temporarily unavailable. Please try again.", "error"
 
     if user is None or not is_valid_hash(password, user["password_hash"]):
-        return False, "Incorrect username or password."
+        return False, "Incorrect username or password.", "error"
 
-    st.session_state["logged_in"] = True
-    st.session_state["username"] = username
-    return True, "Login successful."
+    account_role = str(user["role"] or "user").strip().lower()
+    two_factor_enabled = bool(user["two_factor_enabled"])
+    phone_number = str(user["phone_number"] or "").strip()
+
+    if not two_factor_enabled:
+        complete_streamlit_login(username, account_role)
+        return True, "Login successful.", "complete"
+
+    if not phone_number:
+        return (
+            False,
+            "This account has SMS 2FA enabled but no usable phone number. "
+            "Contact an administrator.",
+            "error",
+        )
+
+    two_factor_started, two_factor_message = start_two_factor_login(
+        username,
+        account_role,
+        phone_number,
+    )
+
+    if not two_factor_started:
+        return False, two_factor_message, "error"
+
+    return True, two_factor_message, "two_factor"
 
 
 ui.content_profile_control()
@@ -246,13 +316,16 @@ with access_column:
             )
 
         if login_submitted:
-            login_successful, login_message = login_streamlit_user(
+            login_successful, login_message, login_step = login_streamlit_user(
                 login_username,
                 login_password,
             )
 
-            if login_successful:
+            if login_successful and login_step == "complete":
                 st.switch_page("pages/1_dashboard.py")
+            elif login_successful and login_step == "two_factor":
+                st.success(login_message)
+                st.rerun()
             else:
                 st.error(login_message)
 
@@ -332,6 +405,87 @@ with access_column:
             width="stretch",
         ):
             show_auth_view("login")
+
+    elif auth_view == "two_factor":
+        st.subheader("SMS two-factor verification")
+        pending_username = st.session_state.get("pending_2fa_username")
+        pending_phone = st.session_state.get("pending_2fa_phone")
+        pending_role = st.session_state.get("pending_2fa_role", "user")
+
+        if not pending_username or not pending_phone:
+            st.warning("No pending SMS verification is available. Please log in again.")
+            clear_pending_two_factor()
+
+            if st.button("Back to login", icon=":material/login:", width="stretch"):
+                show_auth_view("login")
+
+            st.stop()
+
+        st.caption(
+            "Password verified. Enter the SMS code sent to "
+            f"{twilio_service.mask_phone_number(pending_phone)} to finish login."
+        )
+
+        with st.form("two_factor_code_form", enter_to_submit=True):
+            two_factor_code = st.text_input(
+                "SMS verification code",
+                autocomplete="one-time-code",
+            )
+            verify_submitted = st.form_submit_button(
+                "Verify code",
+                type="primary",
+                icon=":material/verified_user:",
+                width="stretch",
+            )
+
+        if verify_submitted:
+            code_approved, code_message = twilio_service.check_two_factor_code(
+                pending_phone,
+                two_factor_code,
+            )
+
+            if code_approved:
+                complete_streamlit_login(pending_username, pending_role)
+                st.switch_page("pages/1_dashboard.py")
+            else:
+                st.error(code_message)
+
+        resend_column, cancel_column = st.columns(2, gap="small")
+
+        with resend_column:
+            if st.button(
+                "Resend code",
+                icon=":material/sms:",
+                width="stretch",
+                key="two_factor_resend",
+            ):
+                last_sent = float(st.session_state.get("pending_2fa_last_sent", 0))
+                seconds_since_send = time.time() - last_sent
+
+                if seconds_since_send < TWO_FACTOR_RESEND_SECONDS:
+                    seconds_left = int(TWO_FACTOR_RESEND_SECONDS - seconds_since_send)
+                    st.warning(f"Please wait {seconds_left} seconds before resending.")
+                else:
+                    resent, resend_message = twilio_service.send_two_factor_code(
+                        pending_phone
+                    )
+
+                    if resent:
+                        st.session_state["pending_2fa_last_sent"] = time.time()
+                        st.success(resend_message)
+                    else:
+                        st.error(resend_message)
+
+        with cancel_column:
+            if st.button(
+                "Cancel login",
+                icon=":material/cancel:",
+                width="stretch",
+                key="two_factor_cancel",
+            ):
+                clear_pending_two_factor()
+                st.session_state["auth_view"] = "login"
+                st.rerun()
 
     else:
         st.subheader("📧 Recover account")

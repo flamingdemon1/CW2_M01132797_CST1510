@@ -22,6 +22,14 @@ def create_user_table(conn):
     if "email" not in existing_columns:
         cursor.execute("ALTER TABLE users ADD COLUMN email TEXT;")
 
+    if "phone_number" not in existing_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN phone_number TEXT;")
+
+    if "two_factor_enabled" not in existing_columns:
+        cursor.execute(
+            "ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 0;"
+        )
+
     conn.commit()
 
 

@@ -617,6 +617,17 @@ def logout():
     """Clear the shared authenticated session."""
     st.session_state["logged_in"] = False
     st.session_state["username"] = ""
+    st.session_state["role"] = ""
+
+    for key in [
+        "pending_2fa_username",
+        "pending_2fa_role",
+        "pending_2fa_phone",
+        "pending_2fa_started",
+        "pending_2fa_last_sent",
+        "profile_pending_2fa_phone",
+    ]:
+        st.session_state.pop(key, None)
 
 
 def sidebar_logo(logo_path=None):

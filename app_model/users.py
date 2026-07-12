@@ -73,17 +73,50 @@ def get_all_users_safe(conn):
     cursor = conn.cursor()
     cursor.execute("PRAGMA table_info(users);")
     columns = {column["name"] for column in cursor.fetchall()}
-    created_column = ", created_at" if "created_at" in columns else ""
-    cursor.execute(
-        f"""
-        SELECT
-            username,
-            COALESCE(role, 'user') AS role,
+    safe_columns = [
+        "username",
+        "COALESCE(role, 'user') AS role",
+        """
             CASE
                 WHEN email IS NOT NULL AND TRIM(email) <> '' THEN 'Configured'
                 ELSE 'Not configured'
             END AS recovery_email_status
-            {created_column}
+        """,
+    ]
+
+    if {"phone_number", "two_factor_enabled"}.issubset(columns):
+        safe_columns.extend(
+            [
+                """
+                    CASE
+                        WHEN phone_number IS NOT NULL AND TRIM(phone_number) <> '' THEN 'Configured'
+                        ELSE 'Not configured'
+                    END AS phone_status
+                """,
+                """
+                    CASE
+                        WHEN COALESCE(two_factor_enabled, 0) = 1 THEN 'Enabled'
+                        ELSE 'Disabled'
+                    END AS two_factor_status
+                """,
+            ]
+        )
+    else:
+        safe_columns.extend(
+            [
+                "'Not configured' AS phone_status",
+                "'Disabled' AS two_factor_status",
+            ]
+        )
+
+    if "created_at" in columns:
+        safe_columns.append("created_at")
+
+    select_columns = ",\n            ".join(safe_columns)
+    cursor.execute(
+        f"""
+        SELECT
+            {select_columns}
         FROM users
         ORDER BY username COLLATE NOCASE;
         """
@@ -142,6 +175,53 @@ def update_recovery_email(conn, username, email):
         raise ValueError("Recovery email cannot be empty.")
 
     return update_email(conn, username, normalised_email)
+
+
+def update_phone_number(conn, username, phone_number):
+    """Add or replace one user's verified SMS phone number."""
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE users SET phone_number = ? WHERE username = ?;",
+        (phone_number.strip(), username),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def set_two_factor_enabled(conn, username, enabled):
+    """Turn SMS two-factor authentication on or off for one user."""
+    enabled_value = 1 if enabled else 0
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE users SET two_factor_enabled = ? WHERE username = ?;",
+        (enabled_value, username),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def get_two_factor_status(conn, username):
+    """Return the stored phone number and 2FA setting for one user."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT
+            phone_number,
+            COALESCE(two_factor_enabled, 0) AS two_factor_enabled
+        FROM users
+        WHERE username = ?;
+        """,
+        (username,),
+    )
+    row = cursor.fetchone()
+
+    if row is None:
+        return None
+
+    return {
+        "phone_number": row["phone_number"],
+        "two_factor_enabled": bool(row["two_factor_enabled"]),
+    }
 
 
 def update_user(conn, old_username, new_username):

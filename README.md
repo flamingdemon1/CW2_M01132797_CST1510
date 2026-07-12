@@ -92,6 +92,7 @@ Important direct dependencies include:
 - `bcrypt` for password hashing and verification.
 - `groq` for SmartBoyAI responses.
 - `sendgrid` for password-recovery email.
+- `twilio` for optional SMS two-factor authentication.
 - `rich` for CLI panels, tables, and colours.
 
 ## Secrets and API Keys
@@ -115,6 +116,9 @@ GROQ_API_KEY = "your_groq_api_key_here"
 SENDGRID_API_KEY = "your_sendgrid_api_key_here"
 SENDGRID_FROM_EMAIL = "your_verified_sender_email_here"
 ALLOW_LOCAL_RESET_FALLBACK = false
+TWILIO_ACCOUNT_SID = "put_your_twilio_account_sid_here"
+TWILIO_AUTH_TOKEN = "put_your_twilio_auth_token_here"
+TWILIO_VERIFY_SERVICE_SID = "put_your_twilio_verify_service_sid_here"
 ```
 
 - `GROQ_API_KEY` enables SmartBoyAI.
@@ -122,11 +126,13 @@ ALLOW_LOCAL_RESET_FALLBACK = false
 - The SendGrid sender address must be verified in the SendGrid account.
 - `ALLOW_LOCAL_RESET_FALLBACK` is disabled by default. Enable it only for
   intentional local testing when email delivery is unavailable.
+- The three Twilio values enable optional SMS 2FA through a Twilio Verify
+  Service.
 
 Real keys must be stored only in `.streamlit/secrets.toml` or environment
 variables. `.streamlit/secrets.toml` is ignored by Git and must never be
 committed. The application displays friendly configuration messages instead of
-crashing when Groq or SendGrid keys are missing.
+crashing when Groq, SendGrid, or Twilio keys are missing.
 
 ## Running the Streamlit App
 
@@ -146,7 +152,7 @@ The standard workflow is:
 1. Register with a username, recovery email, and strong password.
 2. Log in to open the protected dashboard.
 3. Use the sidebar to open Dashboard, SmartBoyAI, and Profile.
-4. Use Profile to update the recovery email or password.
+4. Use Profile to update the recovery email, password, or optional SMS 2FA.
 
 ## Running the CLI
 
@@ -243,6 +249,23 @@ Local on-screen reset codes are disabled unless
 `ALLOW_LOCAL_RESET_FALLBACK = true` is explicitly configured. If email delivery
 fails while fallback is disabled, Gatekeeper shows a safe error message.
 
+## Optional SMS Two-Factor Authentication
+
+SMS 2FA is optional and controlled by each user from the Profile page. It uses
+Twilio Verify and does not replace the normal username/password login.
+
+1. The user enters their username and password.
+2. Gatekeeper checks the bcrypt password hash first.
+3. If SMS 2FA is disabled, login completes normally.
+4. If SMS 2FA is enabled, Gatekeeper asks Twilio Verify to send an SMS code.
+5. Login is completed only when Twilio returns `approved` for the submitted code.
+
+Phone numbers must use international E.164 format, such as `+23057953519`.
+The app does not store SMS codes locally because Twilio handles code generation
+and checking. Twilio credentials belong only in `.streamlit/secrets.toml` or
+environment variables. Trial Twilio accounts may only send SMS messages to
+recipient numbers verified in the Twilio account.
+
 ## Rich CLI Presentation
 
 Rich improves terminal readability only. It does not change authentication,
@@ -281,8 +304,10 @@ labelled axes, appropriate chart types, consistent colours, and reduced clutter.
 
 The role-protected Admin page provides safe system monitoring. Administrators
 can update user roles and add or replace recovery emails for users who cannot
-reset their password. The final administrator cannot be demoted, and password
-hashes, reset codes, API keys, and secrets are never displayed.
+reset their password. It also shows whether SMS 2FA and an SMS phone are
+configured, without showing full phone numbers. The final administrator cannot
+be demoted, and password hashes, reset codes, API keys, and secrets are never
+displayed.
 
 ## Security and Privacy Notes
 
@@ -291,6 +316,8 @@ hashes, reset codes, API keys, and secrets are never displayed.
   bcrypt hashing still happen in Python.
 - Password hashes are not displayed in user listings.
 - Login errors do not reveal whether a username or password was incorrect.
+- Optional SMS 2FA starts only after bcrypt password verification succeeds.
+- SMS verification codes are checked by Twilio Verify and are not stored locally.
 - Streamlit protected pages check authenticated session state.
 - CLI administrator actions require a logged-in administrator role.
 - Secrets are loaded from ignored local configuration or environment variables.
