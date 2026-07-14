@@ -177,8 +177,8 @@ def is_prompt_in_scope(prompt, earlier_messages):
     if recent_context_is_in_scope:
         return True
 
-    # Vague prompts are allowed. The system prompt keeps the answer in scope
-    # and asks for clarification when there is no useful conversation context.
+    # vague prompts are allowed. The system prompt keeps the answer in scope-
+    # and asks for clarification when there is no useful conversation context
     return True
 
 
