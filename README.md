@@ -8,7 +8,7 @@ Coursework Two. It contains two interfaces that share the same SQLite database:
 - A Streamlit web application for account access, dashboard visualisation,
   profile management, password recovery, and SmartBoyAI.
 - A Rich command-line application for account administration, CSV migration,
-  and data previews.
+  data previews, and exports of the latest safe preview.
 
 The project is written to remain understandable for a first-year Computer
 Science demonstration. Security, data access, interface presentation, and
@@ -166,7 +166,9 @@ python main.py
 The CLI keeps password entry hidden with `getpass`. Administrator-only actions
 include user listing, user deletion, CSV migration, and administrator account
 management. Logged-in normal users can preview migrated data and manage their
-own account credentials.
+own account credentials. After using the preview option, logged-in users can
+export the latest displayed preview as a text file, CSV file, or SQLite
+`saved_results` record.
 
 If Rich is missing, the CLI prints:
 
@@ -229,6 +231,8 @@ and Streamlit application reads project data and creates safe context such as:
 This context is passed privately to Groq with the conversation history. The
 approach is similar to retrieval-augmented generation, but it is implemented
 manually and does not use LangChain.
+SmartBoyAI streams Groq response chunks progressively in the Streamlit chat
+interface, then stores the completed assistant reply in session history.
 
 SmartBoyAI does not receive passwords, password hashes, API keys, or full raw
 user-account tables. It refuses clearly unrelated requests such as recipes,
@@ -279,6 +283,7 @@ roles, database operations, or password security. The CLI uses Rich for:
 - Coloured success, warning, information, and error messages.
 - Registered-user tables.
 - Dataset-preview tables.
+- Export prompts for the latest displayed preview.
 
 ## Dashboard Saving and Export Helpers
 
@@ -288,10 +293,11 @@ The shared `app_model/export_service.py` module contains helper functions for:
 2. Save to a CSV file.
 3. Save to the SQLite database.
 
-These helpers are reusable project utilities. Text and CSV helper outputs are
-written to `DATA/exports/` when those helper functions are called. CSV helper
-exports preserve supplied rows and add save metadata. Database helper saves are
-inserted into `saved_results`, which stores:
+These helpers are reusable project utilities. The CLI uses them to export the
+most recent safe dataset preview from option 12. Text and CSV helper outputs are
+written to `DATA/exports/`. CSV helper exports preserve supplied rows and add
+save metadata. Database helper saves are inserted into `saved_results`, which
+stores:
 
 ```text
 id, username, result_type, title, content, created_at, save_source

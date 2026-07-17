@@ -1,7 +1,7 @@
 import sqlite3
 from getpass import getpass
 import bcrypt
-from app_model import db, schema, users as user_model
+from app_model import db, export_service, schema, users as user_model
 from app_model.logic import cyber_incidents, metadatas, it_tickets, cisa_kev
 
 
@@ -85,6 +85,7 @@ def display_main_menu(current_user, current_role):
         ("9", "Log out"),
         ("10", "Create admin account"),
         ("11", "Change password"),
+        ("12", "Export or save last preview"),
     ]
 
     for number, label in options:
@@ -578,27 +579,110 @@ def preview_migrated_data(conn):
     try:
         if choice == "1":
             data = cyber_incidents.get_all_cyber_incidents(conn)
-            display_dataframe(data, "Cyber Incidents Preview")
+            title = "Cyber Incidents Preview"
 
         elif choice == "2":
             data = metadatas.get_all_datasets_metadata(conn)
-            display_dataframe(data, "Dataset Metadata Preview")
+            title = "Dataset Metadata Preview"
 
         elif choice == "3":
             data = it_tickets.get_all_it_tickets(conn)
-            display_dataframe(data, "IT Tickets Preview")
+            title = "IT Tickets Preview"
 
         elif choice == "4":
             data = cisa_kev.get_all_cisa_kev(conn)
-            display_dataframe(data, "CISA KEV Preview")
+            title = "CISA KEV Preview"
 
         else:
             print_errormsg("Invalid choice. Please enter 1, 2, 3, or 4.")
+            return None
+
+        if data.empty:
+            print_warningmsg("This dataset is empty, so there is nothing to export.")
+            return None
+
+        preview = data.head()
+        display_dataframe(data, title)
+        print_infomsg("This preview is now available for option 12 export.")
+
+        return {
+            "title": title,
+            "result_type": "Dataset Preview",
+            "content": preview.to_string(index=False),
+            "df": preview,
+        }
 
     except Exception:
         print_warningmsg(
             "The data has not been migrated yet. Please choose option 6 first."
         )
+        return None
+
+
+def export_last_preview(conn, current_user, current_result):
+    """Export the most recent safe dataset preview."""
+    if current_user is None:
+        print_warningmsg("Please log in before exporting a result.")
+        return
+
+    if current_result is None:
+        print_warningmsg("No preview is available yet. Use option 7 first.")
+        return
+
+    console.print(Rule("[bold cyan]Export or Save Last Preview[/bold cyan]"))
+    print_infomsg(f"Current preview: {current_result['title']}")
+    console.print("[cyan]1.[/cyan] Save as text file")
+    console.print("[cyan]2.[/cyan] Save as CSV file")
+    console.print("[cyan]3.[/cyan] Save to SQLite saved_results")
+    console.print("[cyan]4.[/cyan] Cancel")
+
+    choice = input(": > ").strip()
+
+    try:
+        if choice == "1":
+            file_path = export_service.save_result_to_text(
+                current_user,
+                current_result["result_type"],
+                current_result["title"],
+                current_result["content"],
+                save_source="CLI Preview",
+            )
+            print_successmsg(f"Text export saved to {file_path}.")
+
+        elif choice == "2":
+            file_path = export_service.save_result_to_csv(
+                current_user,
+                current_result["result_type"],
+                current_result["title"],
+                current_result["content"],
+                df=current_result["df"],
+                save_source="CLI Preview",
+            )
+            print_successmsg(f"CSV export saved to {file_path}.")
+
+        elif choice == "3":
+            saved_id = export_service.save_result_to_database(
+                conn,
+                current_user,
+                current_result["result_type"],
+                current_result["title"],
+                current_result["content"],
+                save_source="CLI Preview",
+            )
+            print_successmsg(f"Preview saved to SQLite with ID {saved_id}.")
+
+        elif choice == "4":
+            print_warningmsg("Export cancelled.")
+
+        else:
+            print_errormsg("Invalid choice. Please enter 1, 2, 3, or 4.")
+
+    except sqlite3.Error:
+        print_errormsg("The preview could not be saved to SQLite.")
+    except OSError:
+        print_errormsg("The preview could not be saved to a file.")
+    except ValueError as error:
+        print_errormsg(str(error))
 
 
 def main():
@@ -621,6 +705,7 @@ def main():
 
     current_user = None
     current_role = None
+    current_result = None
 
     while True:
         display_main_menu(current_user, current_role)
@@ -639,6 +724,7 @@ def main():
                 if logged_in_user is not None:
                     current_user = logged_in_user
                     current_role = get_user_role(conn, current_user)
+                    current_result = None
                     print_successmsg(f"Login successful! Role: {current_role}")
                 else:
                     print_errormsg("Incorrect username or password.")
@@ -655,6 +741,7 @@ def main():
             if deleted_username is not None and deleted_username == current_user:
                 current_user = None
                 current_role = None
+                current_result = None
                 print_warningmsg("Your account was deleted, so you have been logged out.")
 
         elif choice == "6":
@@ -664,7 +751,9 @@ def main():
             if current_user is None:
                 print_warningmsg("Please log in before previewing migrated data.")
             else:
-                preview_migrated_data(conn)
+                preview_result = preview_migrated_data(conn)
+                if preview_result is not None:
+                    current_result = preview_result
 
         elif choice == "8":
             print_successmsg("Goodbye!")
@@ -683,6 +772,7 @@ def main():
                     print_successmsg(f"{current_user} has been logged out.")
                     current_user = None
                     current_role = None
+                    current_result = None
                 else:
                     print_warningmsg("Log out cancelled.")
 
@@ -692,8 +782,11 @@ def main():
         elif choice == "11":
             change_password(conn, current_user)
 
+        elif choice == "12":
+            export_last_preview(conn, current_user, current_result)
+
         else:
-            print_errormsg("Invalid choice. Please enter a number from 1 to 11.")
+            print_errormsg("Invalid choice. Please enter a number from 1 to 12.")
 
 
 if __name__ == "__main__":

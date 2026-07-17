@@ -613,15 +613,16 @@ def create_database_context(question):
     return "\n".join(summary_parts)
 
 
-def ask_smartboyai(message_history, api_key, database_context):
-    """Send the conversation history to Groq and return the assistant reply."""
+def stream_smartboyai_response(message_history, api_key, database_context):
+    """Send the conversation history to Groq and yield streamed reply text."""
     try:
         from groq import Groq
     except ImportError:
-        return (
+        yield (
             "The Groq package is not installed yet. "
             "Install the project requirements before using SmartBoyAI."
         )
+        return
 
     client = Groq(api_key=api_key)
 
@@ -662,10 +663,19 @@ def ask_smartboyai(message_history, api_key, database_context):
     completion = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=messages,
-        temperature=0.4
+        temperature=0.4,
+        stream=True,
     )
 
-    return completion.choices[0].message.content
+    for chunk in completion:
+        if not chunk.choices:
+            continue
+
+        delta = getattr(chunk.choices[0], "delta", None)
+        content = getattr(delta, "content", None)
+
+        if content:
+            yield content
 
 
 if "messages" not in st.session_state:
@@ -734,25 +744,42 @@ if user_prompt:
         st.write(user_prompt)
 
     earlier_messages = st.session_state["messages"][:-1]
+    prompt_in_scope = is_prompt_in_scope(user_prompt, earlier_messages)
 
-    if not is_prompt_in_scope(user_prompt, earlier_messages):
+    if not prompt_in_scope:
         assistant_reply = SCOPE_REFUSAL
     elif api_key == "":
         assistant_reply = (
             "SmartBoyAI cannot answer yet because the Groq API key is missing."
         )
     else:
-        with st.spinner("SmartBoyAI is thinking..."):
+        assistant_reply = ""
+        with st.chat_message("assistant"):
+            response_placeholder = st.empty()
+
             try:
                 database_context = create_database_context(user_prompt)
-                assistant_reply = ask_smartboyai(
+
+                for text_chunk in stream_smartboyai_response(
                     st.session_state["messages"],
                     api_key,
                     database_context
-                )
+                ):
+                    assistant_reply += text_chunk
+                    response_placeholder.markdown(assistant_reply)
+
+                if assistant_reply.strip() == "":
+                    assistant_reply = "SmartBoyAI did not return a response."
+                    response_placeholder.warning(assistant_reply)
+
             except Exception as error:
                 assistant_reply = "SmartBoyAI could not get a response."
+                response_placeholder.error(assistant_reply)
                 st.caption(f"Technical detail: {type(error).__name__}")
+
+    if not (api_key != "" and prompt_in_scope):
+        with st.chat_message("assistant"):
+            st.write(assistant_reply)
 
     st.session_state["messages"].append(
         {
@@ -760,6 +787,3 @@ if user_prompt:
             "content": assistant_reply
         }
     )
-
-    with st.chat_message("assistant"):
-        st.write(assistant_reply)
