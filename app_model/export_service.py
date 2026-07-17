@@ -152,8 +152,28 @@ def save_result_to_database(
     conn.commit()
     return cursor.lastrowid
 
+
+def get_saved_results(conn, username=None):
+    """Get saved-result summaries, optionally for one user."""
+    schema.create_saved_results_table(conn)
+    cursor = conn.cursor()
+
+    sql = """
+        SELECT id, username, result_type, title, created_at, save_source
+        FROM saved_results
+    """
+    params = []
+
+    if username is not None:
+        sql += " WHERE username = ?"
+        params.append(username)
+
+    sql += " ORDER BY id DESC;"
+    cursor.execute(sql, tuple(params))
+    return cursor.fetchall()
+
 def get_saved_result(conn, result_id, username=None):
-    """Get one saved result, with an owner check when username is given."""
+    """Get one complete saved result, optionally limited to its owner."""
     schema.create_saved_results_table(conn)
     cursor = conn.cursor()
 
@@ -165,24 +185,4 @@ def get_saved_result(conn, result_id, username=None):
         params.append(username)
 
     cursor.execute(sql, tuple(params))
-    return cursor.fetchone()
-
-
-def get_saved_result(conn, result_id, username=None):
-    """Return one complete saved result with optional owner filtering."""
-    schema.create_saved_results_table(conn)
-    cursor = conn.cursor()
-
-    if username is None:
-        cursor.execute("SELECT * FROM saved_results WHERE id = ?;", (result_id,))
-    else:
-        cursor.execute(
-            """
-            SELECT *
-            FROM saved_results
-            WHERE id = ? AND username = ?;
-            """,
-            (result_id, username),
-        )
-
     return cursor.fetchone()

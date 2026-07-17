@@ -8,7 +8,7 @@ Coursework Two. It contains two interfaces that share the same SQLite database:
 - A Streamlit web application for account access, dashboard visualisation,
   profile management, password recovery, and SmartBoyAI.
 - A Rich command-line application for account administration, CSV migration,
-  data previews, and result exports.
+  and data previews.
 
 The project is written to remain understandable for a first-year Computer
 Science demonstration. Security, data access, interface presentation, and
@@ -189,7 +189,7 @@ include:
 - `cyber_incidents`: migrated cyber-incident records.
 - `it_tickets`: migrated IT-support ticket records.
 - `datasets_metadata`: migrated dataset information.
-- `saved_results`: summaries saved by the CLI/export helpers and Streamlit dashboard.
+- `saved_results`: summaries saved by the export helpers and Streamlit dashboard.
 
 The database file is local and ignored by Git. On a fresh setup, the user table
 is created automatically. Dataset tables are created when an administrator uses
@@ -280,27 +280,30 @@ roles, database operations, or password security. The CLI uses Rich for:
 - Registered-user tables.
 - Dataset-preview tables.
 
-## Text, CSV, and Database Exports
+## Dashboard Saving and Export Helpers
 
-The shared `app_model/export_service.py` module supports:
+The shared `app_model/export_service.py` module contains helper functions for:
 
 1. Save to a UTF-8 text file.
 2. Save to a CSV file.
 3. Save to the SQLite database.
 
-Text and CSV files are written to `DATA/exports/`. CSV exports preserve the
-displayed rows and add save metadata. Database exports are inserted into
-`saved_results`, which stores:
+These helpers are reusable project utilities. Text and CSV helper outputs are
+written to `DATA/exports/` when those helper functions are called. CSV helper
+exports preserve supplied rows and add save metadata. Database helper saves are
+inserted into `saved_results`, which stores:
 
 ```text
 id, username, result_type, title, content, created_at, save_source
 ```
 
-The protected Streamlit dashboard can also save its current filtered summary to
-the same `saved_results` table. The summary includes the active severity filter,
-incident total, category/status/severity counts, and a note explaining that
-table pagination does not change the saved totals. Users can select which of the
-four dashboard visualisations are displayed without removing any chart.
+The protected Streamlit dashboard exposes the current saved-result feature. It
+can save its current filtered summary to the same `saved_results` table. The
+summary includes the active severity filter, incident total,
+category/status/severity counts, and a note explaining that table pagination
+does not change the saved totals. Users can view their recent saved dashboard
+summaries from the Dashboard page. Users can also select which of the four
+dashboard visualisations are displayed without removing any chart.
 The visualisations follow standard data-visualisation principles: clear titles,
 labelled axes, appropriate chart types, consistent colours, and reduced clutter.
 
