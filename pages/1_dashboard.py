@@ -6,7 +6,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 from app_model import db, export_service, ui
-from app_model.logic import cyber_incidents, cisa_kev
+from app_model.logic import cyber_incidents, cisa_kev, it_tickets, metadatas
 
 
 REQUIRED_INCIDENT_COLUMNS = {
@@ -14,6 +14,17 @@ REQUIRED_INCIDENT_COLUMNS = {
     "severity",
     "category",
     "status",
+}
+REQUIRED_TICKET_COLUMNS = {
+    "ticket_id",
+    "priority",
+    "status",
+    "resolution_time_hours",
+}
+REQUIRED_METADATA_COLUMNS = {
+    "name",
+    "rows",
+    "columns",
 }
 CISA_TABLE_COLUMNS = [
     "cveID",
@@ -128,6 +139,50 @@ def load_cisa_kev_data():
     data["dateAddedParsed"] = pd.to_datetime(data["dateAdded"], errors="coerce")
     data["dueDateParsed"] = pd.to_datetime(data["dueDate"], errors="coerce")
     data["yearAdded"] = data["dateAddedParsed"].dt.year
+    return data
+
+
+def load_it_ticket_data():
+    """Load the required IT ticket dataset from SQLite."""
+    conn = db.get_connection()
+
+    try:
+        data = it_tickets.get_all_it_tickets(conn)
+    finally:
+        conn.close()
+
+    missing_columns = REQUIRED_TICKET_COLUMNS.difference(data.columns)
+
+    if missing_columns:
+        missing_names = ", ".join(sorted(missing_columns))
+        raise ValueError(f"Missing IT ticket columns: {missing_names}")
+
+    data = data.copy()
+    data["resolution_time_hours"] = pd.to_numeric(
+        data["resolution_time_hours"],
+        errors="coerce",
+    )
+    return data
+
+
+def load_dataset_metadata():
+    """Load the required dataset metadata table from SQLite."""
+    conn = db.get_connection()
+
+    try:
+        data = metadatas.get_all_datasets_metadata(conn)
+    finally:
+        conn.close()
+
+    missing_columns = REQUIRED_METADATA_COLUMNS.difference(data.columns)
+
+    if missing_columns:
+        missing_names = ", ".join(sorted(missing_columns))
+        raise ValueError(f"Missing dataset metadata columns: {missing_names}")
+
+    data = data.copy()
+    data["rows"] = pd.to_numeric(data["rows"], errors="coerce")
+    data["columns"] = pd.to_numeric(data["columns"], errors="coerce")
     return data
 
 
@@ -772,6 +827,224 @@ except (sqlite3.Error, OSError):
 except Exception as error:
     st.error("Saved results could not be displayed.")
     st.caption(f"Technical detail: {type(error).__name__}")
+
+
+ui.section_heading(
+    "Coursework dataset coverage",
+    "Compact Streamlit summaries for the required IT ticket and metadata datasets.",
+)
+st.caption(
+    "The main dashboard focuses on cyber incidents, while these summaries show "
+    "that the other required CSV datasets are also migrated into SQLite."
+)
+
+ticket_tab, metadata_tab = st.tabs(["IT Operations", "Dataset Metadata"])
+
+with ticket_tab:
+    try:
+        ticket_data = load_it_ticket_data()
+    except Exception as error:
+        ticket_data = pd.DataFrame()
+        st.info(
+            "IT ticket data is not available yet. Use the CLI migration option "
+            "to migrate DATA/it_tickets.csv into SQLite."
+        )
+        st.caption(f"Technical detail: {type(error).__name__}")
+
+    if not ticket_data.empty:
+        ticket_metric_columns = st.columns(4)
+        open_tickets = int(
+            ticket_data["status"].fillna("").str.lower().eq("open").sum()
+        )
+        high_priority = int(
+            ticket_data["priority"]
+            .fillna("")
+            .str.lower()
+            .isin(["high", "critical"])
+            .sum()
+        )
+        average_resolution = ticket_data["resolution_time_hours"].dropna().mean()
+
+        with ticket_metric_columns[0]:
+            ui.metric_card(
+                "Total tickets",
+                len(ticket_data),
+                note="Rows in it_tickets",
+                accent="blue",
+            )
+
+        with ticket_metric_columns[1]:
+            ui.metric_card(
+                "Open tickets",
+                open_tickets,
+                note="Current open workload",
+                accent="red",
+            )
+
+        with ticket_metric_columns[2]:
+            ui.metric_card(
+                "High/Critical priority",
+                high_priority,
+                note="Tickets needing attention",
+                accent="amber",
+            )
+
+        with ticket_metric_columns[3]:
+            ui.metric_card(
+                "Avg resolution",
+                (
+                    f"{average_resolution:.1f}h"
+                    if not pd.isna(average_resolution)
+                    else "N/A"
+                ),
+                note="resolution_time_hours",
+                accent="green",
+            )
+
+        priority_counts = (
+            ticket_data["priority"]
+            .fillna("Unknown")
+            .value_counts()
+            .rename_axis("Priority")
+            .reset_index(name="Tickets")
+        )
+        priority_chart = (
+            alt.Chart(priority_counts)
+            .mark_bar(color="#d97706", cornerRadiusEnd=3)
+            .encode(
+                x=alt.X("Priority:N", sort="-y", title="Priority"),
+                y=alt.Y("Tickets:Q", title="Number of tickets"),
+                tooltip=["Priority:N", "Tickets:Q"],
+            )
+            .properties(height=240, padding=CHART_PADDING)
+        )
+
+        status_counts = (
+            ticket_data["status"]
+            .fillna("Unknown")
+            .value_counts()
+            .rename_axis("Status")
+            .reset_index(name="Tickets")
+        )
+        status_chart = (
+            alt.Chart(status_counts)
+            .mark_bar(color="#2563eb", cornerRadiusEnd=3)
+            .encode(
+                y=alt.Y("Status:N", sort="-x", title="Status"),
+                x=alt.X("Tickets:Q", title="Number of tickets"),
+                tooltip=["Status:N", "Tickets:Q"],
+            )
+            .properties(height=240, padding=CHART_PADDING)
+        )
+
+        ticket_chart_columns = st.columns(2)
+
+        with ticket_chart_columns[0]:
+            with st.container(border=True):
+                st.subheader("Tickets by priority")
+                st.caption("Shows how IT-support workload is distributed by urgency.")
+                st.altair_chart(style_chart(priority_chart), width="stretch")
+
+        with ticket_chart_columns[1]:
+            with st.container(border=True):
+                st.subheader("Tickets by status")
+                st.caption("Shows workflow state across the migrated ticket records.")
+                st.altair_chart(style_chart(status_chart), width="stretch")
+
+        st.subheader("IT ticket preview")
+        st.caption("A small preview of the SQLite ticket table used by SmartBoyAI.")
+        ticket_preview_columns = [
+            "ticket_id",
+            "priority",
+            "status",
+            "assigned_to",
+            "resolution_time_hours",
+        ]
+        ui.themed_dataframe(ticket_data[ticket_preview_columns].head(10), height=280)
+
+with metadata_tab:
+    try:
+        metadata_data = load_dataset_metadata()
+    except Exception as error:
+        metadata_data = pd.DataFrame()
+        st.info(
+            "Dataset metadata is not available yet. Use the CLI migration option "
+            "to migrate DATA/datasets_metadata.csv into SQLite."
+        )
+        st.caption(f"Technical detail: {type(error).__name__}")
+
+    if not metadata_data.empty:
+        metadata_metric_columns = st.columns(4)
+        total_rows = metadata_data["rows"].dropna().sum()
+        average_columns = metadata_data["columns"].dropna().mean()
+        largest_dataset = (
+            metadata_data.sort_values("rows", ascending=False)["name"].iloc[0]
+            if "name" in metadata_data.columns and not metadata_data.empty
+            else "N/A"
+        )
+
+        with metadata_metric_columns[0]:
+            ui.metric_card(
+                "Datasets",
+                len(metadata_data),
+                note="Rows in datasets_metadata",
+                accent="cyan",
+            )
+
+        with metadata_metric_columns[1]:
+            ui.metric_card(
+                "Combined rows",
+                f"{int(total_rows):,}" if not pd.isna(total_rows) else "N/A",
+                note="Sum of metadata row counts",
+                accent="green",
+            )
+
+        with metadata_metric_columns[2]:
+            ui.metric_card(
+                "Avg columns",
+                (
+                    f"{average_columns:.1f}"
+                    if not pd.isna(average_columns)
+                    else "N/A"
+                ),
+                note="Mean dataset width",
+                accent="blue",
+            )
+
+        with metadata_metric_columns[3]:
+            ui.metric_card(
+                "Largest dataset",
+                largest_dataset,
+                note="By row count",
+                accent="amber",
+            )
+
+        row_chart_data = metadata_data.sort_values("rows", ascending=False)
+        row_chart = (
+            alt.Chart(row_chart_data)
+            .mark_bar(color="#0891b2", cornerRadiusEnd=3)
+            .encode(
+                y=alt.Y("name:N", sort="-x", title="Dataset"),
+                x=alt.X("rows:Q", title="Rows"),
+                tooltip=[
+                    alt.Tooltip("name:N", title="Dataset"),
+                    alt.Tooltip("rows:Q", title="Rows", format=","),
+                    alt.Tooltip("columns:Q", title="Columns"),
+                ],
+            )
+            .properties(height=260, padding=CHART_PADDING)
+        )
+
+        with st.container(border=True):
+            st.subheader("Dataset size comparison")
+            st.caption(
+                "Compares the datasets listed in the migrated metadata table."
+            )
+            st.altair_chart(style_chart(row_chart), width="stretch")
+
+        st.subheader("Dataset metadata table")
+        st.caption("Shows the migrated metadata records used for data-context questions.")
+        ui.themed_dataframe(metadata_data, height=280)
 
 
 ui.section_heading(
