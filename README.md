@@ -135,6 +135,73 @@ variables. `.streamlit/secrets.toml` is ignored by Git and must never be
 committed. The application displays friendly configuration messages instead of
 crashing when Groq, SendGrid, or Twilio keys are missing.
 
+### Obtaining Optional Service Credentials
+
+#### Groq — SmartBoyAI
+
+1. Create or sign in to a GroqCloud account.
+2. Open the Groq API Keys page:
+   <https://console.groq.com/keys>
+3. Select "Create API Key".
+4. Copy the generated key into:
+
+```toml
+GROQ_API_KEY = "your_key_here"
+```
+
+Groq is required only for SmartBoyAI. The rest of Gatekeeper remains usable
+without it.
+
+#### SendGrid — Password-Recovery Email
+
+1. Create or sign in to a Twilio SendGrid account.
+2. Follow the official API-key instructions:
+   <https://www.twilio.com/docs/sendgrid/ui/account-and-settings/api-keys>
+3. In SendGrid, open Settings > API Keys and create an API key with permission
+   to send mail.
+4. Follow the official Single Sender Verification instructions:
+   <https://www.twilio.com/docs/sendgrid/ui/sending-email/sender-verification>
+5. Verify the email address that will send password-reset messages.
+6. Enter the values in `secrets.toml`:
+
+```toml
+SENDGRID_API_KEY = "your_sendgrid_key_here"
+SENDGRID_FROM_EMAIL = "the_exact_verified_sender_email"
+```
+
+The `SENDGRID_FROM_EMAIL` value must match a verified SendGrid sender. SendGrid
+is required only for email password recovery.
+
+#### Twilio Verify — Optional SMS Two-Factor Authentication
+
+1. Create or sign in to a Twilio account.
+2. Obtain the Account SID and Auth Token from the Twilio Console. Twilio
+   documents that these credentials may be used for local testing:
+   <https://www.twilio.com/docs/usage/requests-to-twilio>
+3. Create a Twilio Verify Service by following:
+   <https://www.twilio.com/docs/verify/api/service>
+4. Copy the Verify Service SID, which normally begins with `VA`.
+5. Enter the values in `secrets.toml`:
+
+```toml
+TWILIO_ACCOUNT_SID = "your_account_sid"
+TWILIO_AUTH_TOKEN = "your_auth_token"
+TWILIO_VERIFY_SERVICE_SID = "your_verify_service_sid"
+```
+
+Twilio is optional and is needed only for SMS 2FA. Trial Twilio accounts may
+require recipient phone numbers to be verified first.
+
+#### Security Note
+
+Never place real credentials inside `secrets.toml.example`, Python files,
+`README.md` or GitHub. Real credentials belong only inside the ignored local
+`.streamlit/secrets.toml` file or environment variables.
+
+Markers can run the core application without SendGrid or Twilio credentials.
+Features that require an unavailable external service display a safe
+configuration message instead of crashing.
+
 ## Running the Streamlit App
 
 Run this command from the project directory:
