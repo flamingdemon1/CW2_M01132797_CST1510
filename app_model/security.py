@@ -124,7 +124,7 @@ def display_password_strength(password):
     st.caption(feedback)
 
 
-def live_password_input(label, key, theme="dark"):
+def live_password_input(label, key, theme="dark", show_strength=True):
     """Return a password while showing private, per-keystroke visual feedback."""
     palette = THEMES.get(theme, THEMES["dark"])
 
@@ -132,6 +132,7 @@ def live_password_input(label, key, theme="dark"):
         password = _live_password_component(
             label=label,
             theme=theme,
+            show_strength=show_strength,
             colours={
                 "card": palette["card"],
                 "surface": palette["surface"],
@@ -154,6 +155,7 @@ def live_password_input(label, key, theme="dark"):
         # rerun on every keystroke, so true per-character feedback requires a
         # small frontend component. This remains a safe native fallback.
         password = st.text_input(label, type="password", key=f"{key}_fallback")
-        display_password_strength(password)
+        if show_strength:
+            display_password_strength(password)
 
     return password if isinstance(password, str) else ""

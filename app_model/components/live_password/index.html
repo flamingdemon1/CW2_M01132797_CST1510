@@ -62,13 +62,17 @@ value to Streamlit; final password validation and bcrypt hashing remain in Pytho
       font-weight: 600;
     }
 
+    .password-control {
+      position: relative;
+    }
+
     input {
       appearance: none;
       -webkit-appearance: none;
       width: 100%;
       height: 2.5rem;
       min-height: 2.5rem;
-      padding: 0.5rem 0.75rem;
+      padding: 0.5rem 2.75rem 0.5rem 0.75rem;
       border: 1px solid var(--gk-border);
       border-radius: 0.5rem;
       outline: none;
@@ -89,6 +93,41 @@ value to Streamlit; final password validation and bcrypt hashing remain in Pytho
     input:focus {
       border-color: var(--gk-primary-border);
       box-shadow: 0 0 0 1px var(--gk-primary-border);
+    }
+
+    .toggle-password {
+      position: absolute;
+      top: 50%;
+      right: 0.45rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      padding: 0;
+      border: 0;
+      border-radius: 0.4rem;
+      background: transparent;
+      color: var(--gk-muted);
+      cursor: pointer;
+      transform: translateY(-50%);
+    }
+
+    .toggle-password:hover,
+    .toggle-password:focus {
+      color: var(--gk-text);
+      background: var(--gk-border-soft);
+      outline: none;
+    }
+
+    .toggle-password svg {
+      width: 1.1rem;
+      height: 1.1rem;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
     }
 
     .strength-row {
@@ -152,33 +191,57 @@ value to Streamlit; final password validation and bcrypt hashing remain in Pytho
     @media (max-width: 430px) {
       .requirements { grid-template-columns: 1fr; }
     }
+
+    .hidden {
+      display: none;
+    }
   </style>
 </head>
 <body>
   <label id="field-label" for="password-field">New password</label>
-  <input
-    id="password-field"
-    type="password"
-    autocomplete="new-password"
-    spellcheck="false"
-  >
-  <div class="strength-row">
-    <span>Password strength</span>
-    <strong id="strength-label" role="status" aria-live="polite">Start typing</strong>
+  <div class="password-control">
+    <input
+      id="password-field"
+      type="password"
+      autocomplete="new-password"
+      spellcheck="false"
+    >
+    <button
+      id="toggle-password"
+      class="toggle-password"
+      type="button"
+      aria-label="Show password"
+      title="Show password"
+    >
+      <svg id="eye-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+      </svg>
+    </button>
   </div>
-  <div class="track" aria-hidden="true"><div id="strength-bar" class="bar"></div></div>
-  <div class="requirements" aria-label="Password requirements">
-    <span id="length-check" class="requirement">8 or more characters</span>
-    <span id="uppercase-check" class="requirement">Uppercase letter</span>
-    <span id="number-check" class="requirement">Number</span>
-    <span id="symbol-check" class="requirement">Symbol</span>
+  <div id="strength-feedback">
+    <div class="strength-row">
+      <span>Password strength</span>
+      <strong id="strength-label" role="status" aria-live="polite">Start typing</strong>
+    </div>
+    <div class="track" aria-hidden="true"><div id="strength-bar" class="bar"></div></div>
+    <div class="requirements" aria-label="Password requirements">
+      <span id="length-check" class="requirement">8 or more characters</span>
+      <span id="uppercase-check" class="requirement">Uppercase letter</span>
+      <span id="number-check" class="requirement">Number</span>
+      <span id="symbol-check" class="requirement">Symbol</span>
+    </div>
   </div>
 
   <script>
     const input = document.getElementById("password-field");
+    const toggleButton = document.getElementById("toggle-password");
+    const eyeIcon = document.getElementById("eye-icon");
     const label = document.getElementById("field-label");
+    const strengthFeedback = document.getElementById("strength-feedback");
     const strengthLabel = document.getElementById("strength-label");
     const strengthBar = document.getElementById("strength-bar");
+    let showStrength = true;
 
     const checks = {
       length: document.getElementById("length-check"),
@@ -239,17 +302,35 @@ value to Streamlit; final password validation and bcrypt hashing remain in Pytho
       const password = input.value;
       const result = calculateStrength(password);
 
-      strengthLabel.textContent = password ? `${result.label} (${result.score}%)` : "Start typing";
-      strengthBar.style.width = `${result.score}%`;
-      strengthBar.style.backgroundColor = result.colour;
+      if (showStrength) {
+        strengthLabel.textContent = password ? `${result.label} (${result.score}%)` : "Start typing";
+        strengthBar.style.width = `${result.score}%`;
+        strengthBar.style.backgroundColor = result.colour;
 
-      setRequirement(checks.length, result.requirements.length, "8 or more characters");
-      setRequirement(checks.uppercase, result.requirements.uppercase, "Uppercase letter");
-      setRequirement(checks.number, result.requirements.number, "Number");
-      setRequirement(checks.symbol, result.requirements.symbol, "Symbol");
+        setRequirement(checks.length, result.requirements.length, "8 or more characters");
+        setRequirement(checks.uppercase, result.requirements.uppercase, "Uppercase letter");
+        setRequirement(checks.number, result.requirements.number, "Number");
+        setRequirement(checks.symbol, result.requirements.symbol, "Symbol");
+      }
 
       if (sendValue) setComponentValue(password);
       setFrameHeight();
+    }
+
+    function updateVisibilityIcon(isVisible) {
+      toggleButton.setAttribute("aria-label", isVisible ? "Hide password" : "Show password");
+      toggleButton.setAttribute("title", isVisible ? "Hide password" : "Show password");
+
+      eyeIcon.innerHTML = isVisible
+        ? '<path d="M3 3l18 18"></path><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"></path><path d="M9.9 4.2A9.8 9.8 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-3.2 4.4"></path><path d="M6.1 6.1C3.5 8 2 12 2 12s3.5 8 10 8a9.6 9.6 0 0 0 4.1-.9"></path>'
+        : '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle>';
+    }
+
+    function togglePasswordVisibility() {
+      const shouldShow = input.type === "password";
+      input.type = shouldShow ? "text" : "password";
+      updateVisibilityIcon(shouldShow);
+      input.focus();
     }
 
     window.addEventListener("message", event => {
@@ -257,6 +338,8 @@ value to Streamlit; final password validation and bcrypt hashing remain in Pytho
 
       const args = event.data.args || {};
       document.documentElement.dataset.theme = args.theme === "light" ? "light" : "dark";
+      showStrength = args.show_strength !== false;
+      strengthFeedback.classList.toggle("hidden", !showStrength);
       const colours = args.colours || {};
       Object.entries(colours).forEach(([name, value]) => {
         const variableName = `--gk-${name.replaceAll("_", "-")}`;
@@ -267,6 +350,7 @@ value to Streamlit; final password validation and bcrypt hashing remain in Pytho
     });
 
     input.addEventListener("input", () => updateFeedback(true));
+    toggleButton.addEventListener("click", togglePasswordVisibility);
     window.addEventListener("resize", setFrameHeight);
 
     send("streamlit:componentReady", { apiVersion: 1 });

@@ -61,6 +61,20 @@ def get_recovery_email(username):
         return None
 
 
+def confirm_password_input(label, key):
+    """Use the matching password field without strength feedback when available."""
+    try:
+        return live_password_input(
+            label,
+            key=key,
+            theme=ui.get_theme(),
+            show_strength=False,
+        )
+    except TypeError:
+        # Streamlit can keep an older imported helper until the app restarts.
+        return live_password_input(label, key=key, theme=ui.get_theme())
+
+
 def change_recovery_email(username, new_email):
     """Validate and save a recovery email for the active account."""
     new_email = new_email.strip().lower()
@@ -415,9 +429,8 @@ with st.form(
         key="profile_new_password",
         theme=ui.get_theme(),
     )
-    confirm_password = st.text_input(
+    confirm_password = confirm_password_input(
         "Confirm new password",
-        type="password",
         key="profile_confirm_password",
     )
     change_submitted = st.form_submit_button(

@@ -80,6 +80,20 @@ def clear_pending_two_factor():
         st.session_state.pop(key, None)
 
 
+def confirm_password_input(label, key):
+    """Use the matching password field without strength feedback when available."""
+    try:
+        return live_password_input(
+            label,
+            key=key,
+            theme=ui.get_theme(),
+            show_strength=False,
+        )
+    except TypeError:
+        # Streamlit can keep an older imported helper until the app restarts.
+        return live_password_input(label, key=key, theme=ui.get_theme())
+
+
 def complete_streamlit_login(username, role):
     """Mark a Streamlit user as fully authenticated."""
     clear_pending_two_factor()
@@ -371,9 +385,9 @@ with access_column:
                 key="register_password",
                 theme=ui.get_theme(),
             )
-            register_confirm_password = st.text_input(
+            register_confirm_password = confirm_password_input(
                 "Confirm new password",
-                type="password",
+                key="register_confirm_password",
             )
             register_submitted = st.form_submit_button(
                 "Register",
@@ -559,9 +573,9 @@ with access_column:
                     key="recovery_new_password",
                     theme=ui.get_theme(),
                 )
-                recovery_confirm_password = st.text_input(
+                recovery_confirm_password = confirm_password_input(
                     "Confirm new password",
-                    type="password",
+                    key="recovery_confirm_password",
                 )
                 reset_submitted = st.form_submit_button(
                     "Reset password",
